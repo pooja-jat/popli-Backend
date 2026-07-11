@@ -1,0 +1,85 @@
+import { Module } from '@nestjs/common';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
+import { CacheModule } from '@nestjs/cache-manager';
+import { ScheduleModule } from '@nestjs/schedule';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
+import { PrismaModule } from './prisma/prisma.module';
+import { AuthModule } from './auth/auth.module';
+import { UsersModule } from './users/users.module';
+import { ReelsModule } from './reels/reels.module';
+import { StoriesModule } from './stories/stories.module';
+import { ChatModule } from './chat/chat.module';
+import { SocialModule } from './social/social.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { WalletModule } from './wallet/wallet.module';
+import { GiftsModule } from './gifts/gifts.module';
+import { KycModule } from './kyc/kyc.module';
+import { SupportModule } from './support/support.module';
+import { AdminModule } from './admin/admin.module';
+import { UploadModule } from './upload/upload.module';
+import { AnalyticsModule } from './analytics/analytics.module';
+import { SearchModule } from './search/search.module';
+import { InterestsModule } from './interests/interests.module';
+import { ChallengesModule } from './challenges/challenges.module';
+import { HashtagsModule } from './hashtags/hashtags.module';
+import { SystemModule } from './system/system.module';
+import { QueueModule } from './queue/queue.module';
+import { BullModule } from '@nestjs/bullmq';
+
+@Module({
+  imports: [
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60000,
+        limit: 100, // 100 requests per minute
+      },
+    ]),
+    CacheModule.register({ isGlobal: true }),
+   ScheduleModule.forRoot(),
+BullModule.forRootAsync({
+      useFactory: () => {
+        const redisUrl = new URL(process.env.REDIS_URL!);
+        return {
+          connection: {
+            host: redisUrl.hostname,
+            port: Number(redisUrl.port) || 6379,
+            password: redisUrl.password || undefined,
+            tls: { rejectUnauthorized: false },
+          },
+        };
+      },
+    }),
+    QueueModule,
+    PrismaModule,
+    AuthModule,
+    UsersModule,
+    ReelsModule,
+    StoriesModule,
+    ChatModule,
+    SocialModule,
+    NotificationsModule,
+    WalletModule,
+    GiftsModule,
+    KycModule,
+    SupportModule,
+    AdminModule,
+    UploadModule,
+    AnalyticsModule,
+    SearchModule,
+    InterestsModule,
+    ChallengesModule,
+    HashtagsModule,
+    SystemModule,
+  ],
+  controllers: [AppController],
+  providers: [
+    AppService,
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+  ],
+})
+export class AppModule {}

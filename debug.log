@@ -1,0 +1,232 @@
+{"timestamp":"2026-06-21T07:24:34.657Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-25T16:41:12.141Z","status":401,"res":{"message":"Not authorized","error":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-25T16:42:46.709Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-25T16:42:51.317Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-25T16:51:31.011Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-25T16:51:35.542Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-25T16:54:24.803Z","status":404,"res":{"message":"Cannot POST /wallet/process-view-earnings","error":"Not Found","statusCode":404}}
+{"timestamp":"2026-06-25T19:38:05.444Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-25T19:54:05.317Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-26T00:46:24.697Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-26T01:01:41.081Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-26T01:07:06.057Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-26T01:19:36.094Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-26T01:19:40.017Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-26T01:19:40.022Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-26T01:22:53.633Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-26T20:05:21.730Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-26T20:05:24.119Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-26T20:07:08.310Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-26T20:12:26.505Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-27T05:23:58.232Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-27T05:23:58.259Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-27T06:26:23.816Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-27T06:29:23.846Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-27T06:29:23.849Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-29T13:26:37.380Z","status":400,"res":{"message":"Email, phone or username is already in use by another account.","error":"Bad Request","statusCode":400}}
+{"timestamp":"2026-06-29T13:30:38.635Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-29T13:30:38.637Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-29T13:30:38.935Z","status":401,"res":{"message":"Invalid refresh token","error":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-29T13:30:38.939Z","status":401,"res":{"message":"Invalid refresh token","error":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-29T13:30:57.617Z","status":400,"res":{"message":"Email, phone or username is already in use by another account.","error":"Bad Request","statusCode":400}}
+{"timestamp":"2026-06-30T15:31:32.395Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-30T15:41:49.192Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-30T15:41:49.196Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-30T15:41:49.197Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-30T15:41:49.198Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-30T15:41:49.202Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-30T15:41:49.207Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-30T16:13:05.439Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-30T16:13:05.857Z","status":401,"res":{"message":"Invalid refresh token","error":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-30T18:15:54.125Z","status":400,"res":{"message":"KYC must be completed and approved before withdrawal","error":"Bad Request","statusCode":400}}
+{"timestamp":"2026-06-30T18:16:43.595Z","status":400,"res":{"message":"KYC must be completed and approved before withdrawal","error":"Bad Request","statusCode":400}}
+{"timestamp":"2026-06-30T18:19:20.735Z","status":400,"res":{"message":"KYC must be completed and approved before withdrawal","error":"Bad Request","statusCode":400}}
+{"timestamp":"2026-06-30T18:20:04.064Z","status":400,"res":{"message":"KYC must be completed and approved before withdrawal","error":"Bad Request","statusCode":400}}
+{"timestamp":"2026-06-30T18:23:24.714Z","status":400,"res":{"message":"Insufficient balance or concurrent transaction detected.","error":"Bad Request","statusCode":400}}
+{"timestamp":"2026-06-30T18:40:58.364Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-30T18:40:58.438Z","status":401,"res":{"message":"Invalid refresh token","error":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-30T18:43:28.133Z","status":400,"res":{"message":"Insufficient coins","error":"Bad Request","statusCode":400}}
+{"timestamp":"2026-06-30T18:47:20.122Z","status":400,"res":{"message":"You already have a pending withdrawal request.","error":"Bad Request","statusCode":400}}
+{"timestamp":"2026-06-30T18:51:59.821Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-30T18:51:59.828Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-30T18:51:59.969Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-30T18:51:59.974Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-30T18:56:15.157Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-30T18:56:24.367Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-30T18:56:24.371Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-30T18:56:26.236Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-30T18:56:26.259Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-30T18:56:32.402Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-30T18:56:33.025Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-30T18:56:33.658Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-30T18:56:33.995Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-30T18:57:56.598Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-30T18:57:58.318Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-30T18:58:02.709Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-30T18:58:02.724Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-30T18:58:07.227Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-30T18:58:07.237Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-30T18:58:55.692Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-30T18:58:55.717Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-30T19:01:01.940Z","status":400,"res":{"message":"You already have a pending withdrawal request.","error":"Bad Request","statusCode":400}}
+{"timestamp":"2026-06-30T19:04:53.092Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-30T19:04:53.107Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-30T19:04:58.854Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-30T19:04:58.871Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-30T19:06:11.506Z","status":400,"res":{"message":"Request not found or already processed","error":"Bad Request","statusCode":400}}
+{"timestamp":"2026-06-30T19:11:17.094Z","status":400,"res":{"message":"Insufficient balance or concurrent transaction detected.","error":"Bad Request","statusCode":400}}
+{"timestamp":"2026-06-30T19:11:44.147Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-30T19:11:45.675Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-06-30T19:23:41.899Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T11:38:18.487Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T12:48:13.213Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T12:48:14.775Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T12:48:15.079Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T12:48:16.077Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T14:34:17.342Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T14:34:17.352Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T14:34:17.354Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T14:34:17.978Z","status":401,"res":{"message":"Invalid refresh token","error":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T14:34:18.009Z","status":401,"res":{"message":"Invalid refresh token","error":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T14:34:18.038Z","status":401,"res":{"message":"Invalid refresh token","error":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T14:51:27.852Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T14:53:34.171Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T14:53:34.184Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T14:53:34.201Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T14:53:34.212Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T14:53:34.278Z","status":401,"res":{"message":"Invalid refresh token","error":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T14:53:34.300Z","status":401,"res":{"message":"Invalid refresh token","error":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T14:53:34.320Z","status":401,"res":{"message":"Invalid refresh token","error":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T14:53:34.344Z","status":401,"res":{"message":"Invalid refresh token","error":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T14:53:39.221Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T14:53:39.226Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T14:53:39.228Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T14:58:39.438Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T14:58:40.783Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T14:58:41.404Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T14:58:42.561Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T14:59:53.189Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T14:59:54.715Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T14:59:54.996Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T14:59:55.919Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T15:08:44.916Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T15:08:48.908Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T15:08:49.459Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T15:08:50.255Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T15:15:27.153Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T15:15:28.754Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T15:15:31.094Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T15:15:32.327Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T15:15:35.870Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T15:15:36.478Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T15:15:37.133Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T15:15:37.741Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T15:20:56.221Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T15:20:59.075Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T15:21:00.100Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T15:21:01.581Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T15:24:36.622Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T15:24:38.288Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T15:24:38.310Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T15:24:39.211Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T15:27:45.277Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T15:27:47.146Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T15:27:48.882Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T15:27:49.628Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T15:29:20.271Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T15:29:21.880Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T15:29:22.177Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-01T15:29:23.463Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-02T05:20:54.189Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-02T07:06:11.215Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-02T07:06:11.231Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-02T10:22:02.650Z","status":404,"res":{"message":"Reel not found","error":"Not Found","statusCode":404}}
+{"timestamp":"2026-07-02T10:22:33.910Z","status":404,"res":{"message":"Reel not found","error":"Not Found","statusCode":404}}
+{"timestamp":"2026-07-02T10:23:01.765Z","status":404,"res":{"message":"Reel not found","error":"Not Found","statusCode":404}}
+{"timestamp":"2026-07-02T10:23:56.609Z","status":404,"res":{"message":"Reel not found","error":"Not Found","statusCode":404}}
+{"timestamp":"2026-07-02T11:06:47.652Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-02T11:07:14.492Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-02T11:07:14.495Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-02T11:07:14.798Z","status":401,"res":{"message":"Invalid refresh token","error":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-02T11:07:14.801Z","status":401,"res":{"message":"Invalid refresh token","error":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-02T11:25:43.271Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-02T11:25:43.276Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-02T11:25:43.643Z","status":401,"res":{"message":"Invalid refresh token","error":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-02T11:25:43.645Z","status":401,"res":{"message":"Invalid refresh token","error":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-04T10:44:38.973Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-04T10:49:03.878Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-04T10:49:04.204Z","status":401,"res":{"message":"Invalid refresh token","error":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-04T10:49:06.385Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-04T10:49:06.388Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-04T12:06:09.308Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-04T12:06:09.312Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-04T12:06:10.003Z","status":401,"res":{"message":"Invalid refresh token","error":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-04T12:06:10.009Z","status":401,"res":{"message":"Invalid refresh token","error":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-04T13:12:59.420Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-04T13:12:59.440Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-04T13:18:17.284Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-04T13:18:17.665Z","status":401,"res":{"message":"Invalid refresh token","error":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-04T13:18:19.957Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-04T13:18:19.961Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-04T13:30:03.564Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-04T13:41:04.731Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-04T13:42:00.694Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-04T13:42:00.697Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-04T13:47:08.588Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-04T13:47:08.591Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-04T13:53:29.516Z","status":400,"res":{"message":"Email, phone or username is already in use by another account.","error":"Bad Request","statusCode":400}}
+{"timestamp":"2026-07-04T14:23:10.806Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-04T14:24:38.395Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-04T14:24:38.397Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-04T14:28:15.991Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-04T14:28:15.994Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-04T14:28:15.998Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-04T14:29:18.923Z","status":400,"res":{"message":"KYC must be completed and approved before withdrawal","error":"Bad Request","statusCode":400}}
+{"timestamp":"2026-07-04T14:32:11.219Z","status":400,"res":{"message":"Insufficient balance or concurrent transaction detected.","error":"Bad Request","statusCode":400}}
+{"timestamp":"2026-07-04T15:33:51.800Z","status":404,"res":{"message":"Story not found","error":"Not Found","statusCode":404}}
+{"timestamp":"2026-07-04T17:55:23.579Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-04T17:58:16.009Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-04T17:58:16.169Z","status":401,"res":{"message":"Invalid refresh token","error":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-04T17:58:19.081Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-04T17:58:19.084Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-04T18:00:41.710Z","status":400,"res":{"message":"You already have a pending withdrawal request.","error":"Bad Request","statusCode":400}}
+{"timestamp":"2026-07-05T01:05:31.846Z","status":400,"res":{"message":["identifier should not be empty","identifier must be a string"],"error":"Bad Request","statusCode":400}}
+{"timestamp":"2026-07-05T01:05:37.333Z","status":400,"res":{"message":["identifier should not be empty","identifier must be a string"],"error":"Bad Request","statusCode":400}}
+{"timestamp":"2026-07-05T01:05:50.896Z","status":400,"res":{"message":"Please use Firebase Token Verification for OTPs.","error":"Bad Request","statusCode":400}}
+{"timestamp":"2026-07-05T01:23:58.024Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-05T01:24:23.600Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-05T02:14:28.127Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-05T02:14:28.279Z","status":401,"res":{"message":"Invalid refresh token","error":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-05T04:25:28.047Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-05T04:25:28.400Z","status":401,"res":{"message":"Invalid refresh token","error":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-05T04:44:39.566Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-05T04:44:39.822Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-05T04:44:39.827Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-05T04:44:40.330Z","status":401,"res":{"message":"Invalid refresh token","error":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-05T04:44:40.341Z","status":401,"res":{"message":"Invalid refresh token","error":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-05T04:44:40.375Z","status":401,"res":{"message":"Invalid refresh token","error":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-06T09:03:19.935Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-06T09:03:20.214Z","status":401,"res":{"message":"Invalid refresh token","error":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-06T10:37:39.964Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-06T10:37:40.033Z","status":401,"res":{"message":"Invalid refresh token","error":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-06T10:38:21.186Z","status":400,"res":{"message":"Email, phone or username is already in use by another account.","error":"Bad Request","statusCode":400}}
+{"timestamp":"2026-07-06T10:39:29.065Z","status":400,"res":{"message":"Invalid OTP. Please try again.","error":"Bad Request","statusCode":400}}
+{"timestamp":"2026-07-06T11:08:19.193Z","status":400,"res":{"message":"Email, phone or username is already in use by another account.","error":"Bad Request","statusCode":400}}
+{"timestamp":"2026-07-06T11:12:38.963Z","status":400,"res":{"message":"Email, phone or username is already in use by another account.","error":"Bad Request","statusCode":400}}
+{"timestamp":"2026-07-06T11:17:21.080Z","status":400,"res":{"message":"Email, phone or username is already in use by another account.","error":"Bad Request","statusCode":400}}
+{"timestamp":"2026-07-06T11:34:36.977Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-06T11:34:36.994Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-06T11:37:16.054Z","status":400,"res":{"message":"Email, phone or username is already in use by another account.","error":"Bad Request","statusCode":400}}
+{"timestamp":"2026-07-06T11:43:13.472Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-06T11:43:13.547Z","status":401,"res":{"message":"Invalid refresh token","error":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-06T11:45:22.676Z","status":400,"res":{"message":"Email, phone or username is already in use by another account.","error":"Bad Request","statusCode":400}}
+{"timestamp":"2026-07-06T13:09:23.365Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-06T13:09:23.441Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-06T13:09:23.443Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-06T13:09:23.557Z","status":401,"res":{"message":"Invalid refresh token","error":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-06T13:09:23.561Z","status":401,"res":{"message":"Invalid refresh token","error":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-06T13:09:23.633Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-06T13:09:23.639Z","status":401,"res":{"message":"Invalid refresh token","error":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-06T13:09:24.913Z","status":401,"res":{"message":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-07-07T04:57:45.921Z","status":404,"res":{"message":"Cannot GET /admin/feed-config","error":"Not Found","statusCode":404}}
+{"timestamp":"2026-07-07T04:57:46.996Z","status":404,"res":{"message":"Cannot GET /admin/feed-config","error":"Not Found","statusCode":404}}

@@ -1,0 +1,859 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                          String                       @id @default(uuid())
+  phone                       String                       @unique
+  email                       String?                      @unique
+  passwordHash                String?
+  name                        String
+  username                    String                       @unique
+  avatar                      String?
+  bio                         String?
+  category                    String?
+  city                        String?
+  latitude                    Float?
+  longitude                   Float?
+  isVerified                  Boolean                      @default(false)
+  role                        Role                         @default(USER)
+  followersCount              Int                          @default(0)
+  followingCount              Int                          @default(0)
+  giftsReceivedCount          Int                          @default(0)
+  createdAt                   DateTime                     @default(now())
+  updatedAt                   DateTime                     @updatedAt
+  dob                         DateTime?
+  gender                      String?
+  isBlocked                   Boolean                      @default(false)
+  isProfileComplete           Boolean                      @default(false)
+  totalLikesReceived          Int                          @default(0)
+  deviceId                    String?
+  deviceToken                 String?
+  referralCode                String?                      @unique
+  referredById                String?
+  firebaseUid                 String?                      @unique
+  socialLinks                 Json?
+  blockedBy                   Block[]                      @relation("Blocked")
+  blocking                    Block[]                      @relation("Blocker")
+  challengeParticipations     ChallengeParticipant[]
+  challengeRewardTransactions ChallengeRewardTransaction[]
+  chatParticipations          ChatParticipant[]
+  comments                    Comment[]
+  commentLikes                CommentLike[]
+  following                   Follows[]                    @relation("UserFollowing")
+  followers                   Follows[]                    @relation("UserFollowers")
+  kycRecord                   KYCRecord?
+  likes                       Like[]
+  messagesSent                Message[]
+  notifications               Notification[]               @relation("UserNotifications")
+  reels                       Reel[]                       @relation("CreatorReels")
+  reportsSubmitted            Report[]                     @relation("ReporterReports")
+  saves                       Save[]
+  sessions                    Session[]
+  shares                      Share[]
+  stories                     Story[]                      @relation("CreatorStories")
+  archivedStories             StoryArchive[]               @relation("CreatorArchives")
+  storyHighlights             StoryHighlight[]             @relation("CreatorHighlights")
+  storyInteractions           StoryInteraction[]
+  storyReactions              StoryReaction[]
+  storyViews                  StoryViewer[]
+  ticketsSubmitted            SupportTicket[]              @relation("TicketCreator")
+  preferences                 UserPreference?
+  wallet                      Wallet?
+  watchHistory                WatchHistory[]
+  interests                   Interest[]                   @relation("InterestToUser")
+  taggedInReels               Reel[]                       @relation("ReelTaggedUsers")
+}
+
+model Session {
+  id         String   @id @default(uuid())
+  userId     String
+  deviceInfo String?
+  ipAddress  String?
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  revoked    Boolean  @default(false)
+  tokenHash  String   @unique
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model OtpAudit {
+  id          String   @id @default(uuid())
+  phoneNumber String
+  attempts    Int      @default(1)
+  createdAt   DateTime @default(now())
+}
+
+model EmailOtp {
+  id        String   @id @default(uuid())
+  email     String
+  otpHash   String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([email])
+}
+
+model UserPreference {
+  id                   String   @id @default(uuid())
+  userId               String   @unique
+  theme                String   @default("dark")
+  language             String   @default("English")
+  notificationsEnabled Boolean  @default(true)
+  isPrivateProfile     Boolean  @default(false)
+  closeFriendsIds      String[] @default([])
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model KYCRecord {
+  id               String    @id @default(uuid())
+  userId           String    @unique
+  fullName         String
+  dob              String
+  address          String?
+  panNumber        String?
+  aadharNumber     String?
+  upiId            String?
+  bankAccount      String?
+  ifscCode         String?
+  accountType      String    @default("Savings")
+  status           KycStatus @default(PENDING)
+  isPanVerified    Boolean   @default(false)
+  isAadharVerified Boolean   @default(false)
+  isUpiLinked      Boolean   @default(false)
+  isBankLinked     Boolean   @default(false)
+  submittedAt      DateTime  @default(now())
+  reviewedAt       DateTime?
+  rejectionReason  String?
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Follows {
+  followerId  String
+  followingId String
+  createdAt   DateTime @default(now())
+  follower    User     @relation("UserFollowing", fields: [followerId], references: [id], onDelete: Cascade)
+  following   User     @relation("UserFollowers", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@id([followerId, followingId])
+}
+
+model Reel {
+  id                      String             @id @default(uuid())
+  creatorId               String
+  mediaUrl                String
+  thumbnailUrl            String
+  mediaType               MediaType          @default(VIDEO)
+  description             String?
+  musicName               String?
+  category                String?
+  viewsCount              Int                @default(0)
+  likesCount              Int                @default(0)
+  commentsCount           Int                @default(0)
+  sharesCount             Int                @default(0)
+  savesCount              Int                @default(0)
+  latitude                Float?
+  longitude               Float?
+  city                    String?
+  createdAt               DateTime           @default(now())
+  updatedAt               DateTime           @updatedAt
+  layersData              Json?
+  pendingEarningsViews    Int                @default(0)
+  privacy                 String             @default("Public")
+  isMonetized             Boolean            @default(true)
+  challengeId             String?
+   challengeApprovalStatus ReelApprovalStatus @default(PENDING)
+  allowComments           Boolean            @default(true)
+  allowDuet               Boolean            @default(true)
+  allowGifting            Boolean            @default(true)
+  comments                Comment[]
+  likes                   Like[]
+  location                PostLocation?
+  challenge               Challenge?         @relation("ChallengeReels", fields: [challengeId], references: [id])
+  creator                 User               @relation("CreatorReels", fields: [creatorId], references: [id], onDelete: Cascade)
+  hashtags                ReelHashtag[]
+  reports                 Report[]           @relation("ReportedReel")
+  saves                   Save[]
+  shares                  Share[]
+  validViews              ValidView[]
+  watchHistory            WatchHistory[]
+  taggedUsers             User[]             @relation("ReelTaggedUsers")
+}
+
+model PostLocation {
+  id        String   @id @default(uuid())
+  reelId    String   @unique
+  name      String
+  latitude  Float?
+  longitude Float?
+  placeId   String?
+  createdAt DateTime @default(now())
+  reel      Reel     @relation(fields: [reelId], references: [id], onDelete: Cascade)
+}
+
+model Comment {
+  id         String        @id @default(uuid())
+  reelId     String
+  userId     String
+  text       String
+  likesCount Int           @default(0)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+  parentId   String?
+  parent     Comment?      @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies    Comment[]     @relation("CommentReplies")
+  reel       Reel          @relation(fields: [reelId], references: [id], onDelete: Cascade)
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  likes      CommentLike[]
+}
+
+model CommentLike {
+  id        String   @id @default(uuid())
+  commentId String
+  userId    String
+  createdAt DateTime @default(now())
+  comment   Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([commentId, userId])
+}
+
+model Like {
+  id        String   @id @default(uuid())
+  reelId    String
+  userId    String
+  createdAt DateTime @default(now())
+  reel      Reel     @relation(fields: [reelId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([reelId, userId])
+}
+
+model Save {
+  id        String   @id @default(uuid())
+  reelId    String
+  userId    String
+  createdAt DateTime @default(now())
+  reel      Reel     @relation(fields: [reelId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([reelId, userId])
+}
+
+model Share {
+  id        String   @id @default(uuid())
+  reelId    String
+  userId    String
+  platform  String?
+  createdAt DateTime @default(now())
+  reel      Reel     @relation(fields: [reelId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Story {
+  id                    String             @id @default(uuid())
+  creatorId             String
+  mediaUrl              String
+  mediaType             MediaType
+  isCloseFriends        Boolean            @default(false)
+  repliesAllowed        Boolean            @default(true)
+  expiresAt             DateTime
+  createdAt             DateTime           @default(now())
+  layersData            Json?
+  originalOwnerId       String?
+  originalOwnerUsername String?
+  originalStoryId       String?
+  creator               User               @relation("CreatorStories", fields: [creatorId], references: [id], onDelete: Cascade)
+  interactions          StoryInteraction[]
+  reactions             StoryReaction[]
+  viewers               StoryViewer[]
+}
+
+model StoryViewer {
+  id       String   @id @default(uuid())
+  storyId  String
+  userId   String
+  viewedAt DateTime @default(now())
+  story    Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([storyId, userId])
+}
+
+model StoryReaction {
+  id        String   @id @default(uuid())
+  storyId   String
+  userId    String
+  emoji     String
+  createdAt DateTime @default(now())
+  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model StoryInteraction {
+  id        String   @id @default(uuid())
+  storyId   String
+  layerId   String
+  userId    String
+  type      String
+  value     String
+  createdAt DateTime @default(now())
+  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([storyId, layerId, userId])
+}
+
+model StoryArchive {
+  id                    String    @id @default(uuid())
+  creatorId             String
+  mediaUrl              String
+  mediaType             MediaType
+  createdAt             DateTime
+  archivedAt            DateTime  @default(now())
+  originalOwnerId       String?
+  originalOwnerUsername String?
+  originalStoryId       String?
+  creator               User      @relation("CreatorArchives", fields: [creatorId], references: [id], onDelete: Cascade)
+}
+
+model StoryHighlight {
+  id        String   @id @default(uuid())
+  creatorId String
+  title     String
+  coverUrl  String
+  storyIds  String[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  creator   User     @relation("CreatorHighlights", fields: [creatorId], references: [id], onDelete: Cascade)
+}
+
+model Chat {
+  id            String            @id @default(uuid())
+  isGroup       Boolean           @default(false)
+  lastMessage   String?
+  lastMessageAt DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  participants  ChatParticipant[]
+  messages      Message[]
+}
+
+model ChatParticipant {
+  id          String   @id @default(uuid())
+  chatId      String
+  userId      String
+  unreadCount Int      @default(0)
+  joinedAt    DateTime @default(now())
+  chat        Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([chatId, userId])
+}
+
+model Message {
+  id        String      @id @default(uuid())
+  chatId    String
+  senderId  String
+  text      String?
+  mediaUrl  String?
+  status    String      @default("sent")
+  createdAt DateTime    @default(now())
+  storyId   String?
+  type      MessageType @default(TEXT)
+  reactions Json?       @default("{}")
+  chat      Chat        @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  sender    User        @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([storyId])
+}
+
+model Wallet {
+  id                    String              @id @default(uuid())
+  userId                String              @unique
+  coinBalance           Int                 @default(0)
+  inrEarnings           Float               @default(0.0)
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  approvedBalance       Float               @default(0.0)
+  pendingBalance        Float               @default(0.0)
+  totalEarnings         Float               @default(0.0)
+  totalWithdrawn        Float               @default(0.0)
+  withdrawableBalance   Float               @default(0.0)
+  referralLockedBalance Float               @default(0.0)
+  transactions          Transaction[]
+  user                  User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ledgers               WalletLedger[]
+  withdrawalRequests    WithdrawalRequest[]
+}
+
+model Transaction {
+  id            String            @id @default(uuid())
+  walletId      String
+  type          TransactionType
+  amount        Float
+  coinsCredited Int?
+  currency      Currency
+  description String?
+  status      TransactionStatus @default(PENDING)
+  referenceId String?
+  reelId      String?
+  createdAt   DateTime          @default(now())
+  wallet      Wallet            @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([reelId])
+}
+
+model Gift {
+  id            String   @id @default(uuid())
+  name          String
+  costInCoins   Int      @default(0)
+  iconUrl       String
+  animationType String   @default("fly")
+  createdAt     DateTime @default(now())
+  costInINR     Float    @default(0.0)
+}
+
+model Notification {
+  id           String           @id @default(uuid())
+  userId       String
+  type         NotificationType
+  title        String
+  body         String
+  senderId     String?
+  senderAvatar String?
+  isRead       Boolean          @default(false)
+  metaData     Json?
+  createdAt    DateTime         @default(now())
+  commentId    String?
+  isActive     Boolean          @default(true)
+  postId       String?
+  replyId      String?
+  updatedAt    DateTime         @default(now())
+  user         User             @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, senderId, type, commentId, postId, replyId])
+}
+
+model Report {
+  id         String       @id @default(uuid())
+  reporterId String
+  reelId     String?
+  reason     String
+  status     ReportStatus @default(PENDING)
+  createdAt  DateTime     @default(now())
+  resolvedAt DateTime?
+  reel       Reel?        @relation("ReportedReel", fields: [reelId], references: [id])
+  reporter   User         @relation("ReporterReports", fields: [reporterId], references: [id], onDelete: Cascade)
+}
+
+model SupportTicket {
+  id          String       @id @default(uuid())
+  creatorId   String
+  subject     String
+  description String
+  status      TicketStatus @default(OPEN)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  creator     User         @relation("TicketCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+}
+
+model Interest {
+  id       String  @id @default(uuid())
+  name     String  @unique
+  icon     String?
+  isActive Boolean @default(true)
+  users    User[]  @relation("InterestToUser")
+}
+
+model WatchHistory {
+  id        String   @id @default(uuid())
+  userId    String
+  reelId    String
+  watchedAt DateTime @default(now())
+  reel      Reel     @relation(fields: [reelId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, reelId])
+}
+
+model Block {
+  id        String   @id @default(uuid())
+  blockerId String
+  blockedId String
+  createdAt DateTime @default(now())
+  blocked   User     @relation("Blocked", fields: [blockedId], references: [id], onDelete: Cascade)
+  blocker   User     @relation("Blocker", fields: [blockerId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
+}
+
+model Challenge {
+  id                    String                       @id @default(uuid())
+  title                 String
+  description           String?
+  type                  ChallengeType                @default(DAILY)
+  rewardPool            Float                        @default(0.0)
+  status                ChallengeStatus              @default(ACTIVE)
+  startDate             DateTime                     @default(now())
+  endDate               DateTime
+  createdAt             DateTime                     @default(now())
+  updatedAt             DateTime                     @updatedAt
+  bannerUrl             String?
+  coverReelId           String?
+  hashtagName           String?
+  likesCount            Int                          @default(0)
+  maxSubmissionsPerUser Int                          @default(1)
+  participantCount      Int                          @default(0)
+  requiresApproval      Boolean                      @default(false)
+  rules                 String?
+  sharesCount           Int                          @default(0)
+  viewsCount            Int                          @default(0)
+  isSponsored           Boolean                      @default(false)
+  sponsorLogoUrl        String?
+  sponsorName           String?
+  sponsorUrl            String?
+  termsAndConditions    String?
+  participants          ChallengeParticipant[]
+  rewardTransactions    ChallengeRewardTransaction[]
+  reels                 Reel[]                       @relation("ChallengeReels")
+}
+
+model ChallengeParticipant {
+  id          String    @id @default(uuid())
+  challengeId String
+  userId      String
+  score       Int       @default(0)
+  rank        Int?
+  joinedAt    DateTime  @default(now())
+  challenge   Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([challengeId, userId])
+}
+
+model Hashtag {
+  id          String        @id @default(uuid())
+  name        String        @unique
+  usageCount  Int           @default(0)
+  recentScore Float         @default(0)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  reels       ReelHashtag[]
+
+  @@index([usageCount(sort: Desc)])
+  @@index([recentScore(sort: Desc)])
+}
+
+model ReelHashtag {
+  reelId    String
+  hashtagId String
+  createdAt DateTime @default(now())
+  hashtag   Hashtag  @relation(fields: [hashtagId], references: [id], onDelete: Cascade)
+  reel      Reel     @relation(fields: [reelId], references: [id], onDelete: Cascade)
+
+  @@id([reelId, hashtagId])
+  @@index([hashtagId])
+  @@index([reelId])
+}
+
+model ChallengeRewardTransaction {
+  id           String                @id @default(uuid())
+  challengeId  String
+  winnerUserId String
+  rewardAmount Float
+  rewardType   Currency
+  status       ChallengeRewardStatus @default(PENDING)
+  processedAt  DateTime?
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+  challenge    Challenge             @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  winner       User                  @relation(fields: [winnerUserId], references: [id], onDelete: Cascade)
+
+  @@unique([challengeId, winnerUserId])
+}
+
+model WalletLedger {
+  id           String       @id @default(uuid())
+  userId       String
+  walletId     String
+  source       LedgerSource
+  sourceId     String
+  reelId       String?
+  credit       Float        @default(0.0)
+  debit        Float        @default(0.0)
+  balanceAfter Float
+  description  String?
+  createdAt    DateTime     @default(now())
+  wallet       Wallet       @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([walletId])
+  @@index([reelId])
+}
+
+model WithdrawalRequest {
+  id                  String           @id @default(uuid())
+  walletId            String
+  amount              Float
+  status              WithdrawalStatus @default(PENDING)
+  tdsDeducted         Float            @default(0.0)
+  platformFeeDeducted Float            @default(0.0)
+  netPayable          Float            @default(0.0)
+  rejectionReason     String?
+  transactionId       String?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+  wallet              Wallet           @relation(fields: [walletId], references: [id], onDelete: Cascade)
+}
+
+model ViewEvent {
+  id                String   @id @default(uuid())
+  reelId            String
+  userId            String?
+  deviceId          String?
+  sessionId         String?
+  ipHash            String?
+  country           String?
+  state             String?
+  city              String?
+  trafficSource     String?
+  watchDuration     Int      @default(0)
+  completionPercent Float    @default(0.0)
+  createdAt         DateTime @default(now())
+
+  @@index([reelId])
+  @@index([userId])
+  @@index([deviceId])
+  @@index([reelId, country])
+  @@index([reelId, city])
+  @@index([reelId, createdAt])
+}
+
+model ValidView {
+  id          String   @id @default(uuid())
+  reelId      String
+  userId      String?
+  deviceId    String?
+  createdAt   DateTime @default(now())
+  isProcessed Boolean  @default(false)
+  batchId     String?
+  reel        Reel     @relation(fields: [reelId], references: [id], onDelete: Cascade)
+
+  @@unique([reelId, userId])
+  @@unique([reelId, deviceId])
+}
+
+model EarningBatch {
+  id            String    @id @default(uuid())
+  status        String    @default("PENDING")
+  totalViews    Int       @default(0)
+  totalEarnings Float     @default(0.0)
+  createdAt     DateTime  @default(now())
+  processedAt   DateTime?
+}
+
+model EarningSnapshot {
+  id                String   @id @default(uuid())
+  userId            String
+  date              DateTime @db.Date
+  viewEarnings      Float    @default(0.0)
+  giftEarnings      Float    @default(0.0)
+  challengeEarnings Float    @default(0.0)
+  referralEarnings  Float    @default(0.0)
+  totalEarnings     Float    @default(0.0)
+  createdAt         DateTime @default(now())
+
+  @@unique([userId, date])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorId    String
+  action     String
+  entityType String
+  entityId   String
+  oldValue   Json?
+  newValue   Json?
+  timestamp  DateTime @default(now())
+
+  @@index([actorId])
+  @@index([entityType, entityId])
+}
+
+model SystemConfig {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  valueJson   Json
+  description String?
+  updatedAt   DateTime @updatedAt
+  updatedBy   String?
+}
+
+model ReferralTracker {
+  id         String         @id @default(uuid())
+  referrerId String
+  referredId String         @unique
+  status     ReferralStatus @default(PENDING)
+  rewardInr  Float          @default(0.0)
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  @@index([referrerId])
+}
+
+model ChallengeScore {
+  id            String   @id @default(uuid())
+  challengeId   String
+  participantId String
+  views         Int      @default(0)
+  likes         Int      @default(0)
+  comments      Int      @default(0)
+  shares        Int      @default(0)
+  totalScore    Float    @default(0.0)
+  updatedAt     DateTime @updatedAt
+
+  @@unique([challengeId, participantId])
+}
+
+enum Role {
+  USER
+  CREATOR
+  MODERATOR
+  ADMIN
+}
+
+enum MediaType {
+  PHOTO
+  VIDEO
+}
+
+enum TransactionType {
+  GIFT_SEND
+  GIFT_RECEIVE
+  COIN_RECHARGE
+  WITHDRAWAL
+  AD_REVENUE
+  REFERRAL_BONUS
+  CHALLENGE_REWARD
+}
+
+enum TransactionStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+enum Currency {
+  COINS
+  INR
+}
+
+enum KycStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  NOT_SUBMITTED
+}
+
+enum ReportStatus {
+  PENDING
+  REVIEWED
+  RESOLVED
+  DISMISSED
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum ChallengeType {
+  DAILY
+  WEEKLY
+  CUSTOM
+}
+
+enum ChallengeStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  DRAFT
+  SCHEDULED
+  PAUSED
+}
+
+enum MessageType {
+  TEXT
+  STORY_MENTION
+}
+
+enum NotificationType {
+  FOLLOW                    @map("follow")
+  LIKE                      @map("like")
+  TAG                       @map("tag")
+  COMMENT                   @map("comment")
+  REPLY                     @map("reply")
+  COMMENT_LIKE              @map("comment_like")
+  MENTION                   @map("mention")
+  STORY_MENTION             @map("story_mention")
+  GIFT                      @map("gift")
+  CHALLENGE_INVITE          @map("challenge_invite")
+  CHALLENGE_WIN             @map("challenge_win")
+  CHALLENGE_RANKING         @map("challenge_ranking")
+  CHALLENGE_JOINED          @map("challenge_joined")
+  CHALLENGE_ENDING_SOON     @map("challenge_ending_soon")
+  CHALLENGE_REWARD_CREDITED @map("challenge_reward_credited")
+  CHALLENGE_APPROVED        @map("challenge_approved")
+  CHALLENGE_REJECTED        @map("challenge_rejected")
+  SYSTEM                    @map("system")
+}
+
+enum ChallengeRewardStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum ReelApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum LedgerSource {
+  VIEW_EARNING
+  GIFT_RECEIVED
+  GIFT_SENT
+  REFERRAL_BONUS
+  CHALLENGE_REWARD
+  WITHDRAWAL
+  FRAUD_REVERSAL
+  BONUS
+  ADJUSTMENT
+}
+
+enum WithdrawalStatus {
+  PENDING
+  UNDER_REVIEW
+  APPROVED
+  PROCESSING
+  SUCCESS
+  FAILED
+  REJECTED
+}
+
+enum ReferralStatus {
+  PENDING
+  COMPLETED
+  REJECTED
+}

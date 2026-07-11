@@ -1,0 +1,1220 @@
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  UnauthorizedException,
+  Logger,
+} from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
+import { NotificationType } from '@prisma/client';
+import { ChatService } from '../chat/chat.service';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
+import { NotificationsService } from '../notifications/notifications.service';
+import { CreateReelDto, AddCommentDto } from './dto/reels.dto';
+import { HashtagsService } from '../hashtags/hashtags.service';
+import { extractHashtags } from '../utils/hashtags.util';
+import { ChallengesGateway } from '../challenges/challenges.gateway';
+import { checkAndProcessReferral } from '../utils/referral.util';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
+import { VIEW_EARNINGS_QUEUE, ViewEarningsJobData } from '../queue/view-earnings.queue';
+
+@Injectable()
+export class ReelsService {
+  private readonly logger = new Logger(ReelsService.name);
+
+ constructor(
+    private prisma: PrismaService,
+    private chatService: ChatService,
+    private notificationsGateway: NotificationsGateway,
+    private notificationsService: NotificationsService,
+    private hashtagsService: HashtagsService,
+    private challengesGateway: ChallengesGateway,
+    @InjectQueue(VIEW_EARNINGS_QUEUE) private viewEarningsQueue: Queue<ViewEarningsJobData>,
+  ) {}
+
+  async createReel(creatorId: string, dto: CreateReelDto) {
+    let layersData = dto.layersData;
+    if (typeof layersData === 'string') {
+      try {
+        layersData = JSON.parse(layersData);
+      } catch (e) {}
+    }
+
+    const {
+      taggedUserIds: rawTaggedUserIds,
+      challengeId,
+      location,
+      ...restDto
+    } = dto;
+
+    // Validate Tags: max 10, unique, no blocked users
+    let validTaggedUserIds: string[] = [];
+    if (rawTaggedUserIds && rawTaggedUserIds.length > 0) {
+      const uniqueTags = [...new Set(rawTaggedUserIds)].slice(0, 10);
+
+      // Filter out blocked users (creator blocked by them, or creator blocked them)
+      const blocks = await this.prisma.block.findMany({
+        where: {
+          OR: [
+            { blockerId: creatorId, blockedId: { in: uniqueTags } },
+            { blockerId: { in: uniqueTags }, blockedId: creatorId },
+          ],
+        },
+      });
+      const blockedIds = new Set(
+        blocks.map((b) =>
+          b.blockerId === creatorId ? b.blockedId : b.blockerId,
+        ),
+      );
+      validTaggedUserIds = uniqueTags.filter((id) => !blockedIds.has(id));
+    }
+
+    if (challengeId) {
+      const challenge = await this.prisma.challenge.findUnique({
+        where: { id: challengeId },
+        select: { maxSubmissionsPerUser: true, status: true },
+      });
+      if (!challenge || challenge.status !== 'ACTIVE') {
+        throw new BadRequestException(
+          'Challenge is not active or does not exist',
+        );
+      }
+
+      const existingReelsCount = await this.prisma.reel.count({
+        where: { creatorId, challengeId },
+      });
+
+      if (existingReelsCount >= challenge.maxSubmissionsPerUser) {
+        throw new BadRequestException(
+          `You have reached the maximum allowed submissions (${challenge.maxSubmissionsPerUser}) for this challenge`,
+        );
+      }
+    }
+
+    const reel = await this.prisma.reel.create({
+      data: {
+        ...restDto,
+        layersData,
+        creatorId,
+       ...(challengeId && { challengeId, challengeApprovalStatus: 'PENDING' }),
+        ...(validTaggedUserIds.length > 0 && {
+          taggedUsers: {
+            connect: validTaggedUserIds.map((id) => ({ id })),
+          },
+        }),
+        ...(location && {
+          location: {
+            create: {
+              name: location.locationName,
+              latitude: location.latitude,
+              longitude: location.longitude,
+              placeId: location.placeId,
+            },
+          },
+        }),
+      },
+    });
+
+    if (challengeId) {
+      // Auto-join the challenge if they aren't already a participant
+      const existingParticipant =
+        await this.prisma.challengeParticipant.findUnique({
+          where: { challengeId_userId: { challengeId, userId: creatorId } },
+        });
+      if (!existingParticipant) {
+        await this.prisma.challengeParticipant.create({
+          data: { challengeId, userId: creatorId },
+        });
+        await this.prisma.challenge.update({
+          where: { id: challengeId },
+          data: { participantCount: { increment: 1 } },
+        });
+      }
+    }
+
+    if (validTaggedUserIds.length > 0) {
+      const creator = await this.prisma.user.findUnique({
+        where: { id: creatorId },
+        select: { id: true, name: true, avatar: true },
+      });
+
+      if (creator) {
+        for (const taggedUserId of validTaggedUserIds) {
+          if (taggedUserId !== creatorId) {
+            // Send Notification
+            await this.prisma.notification.create({
+              data: {
+                userId: taggedUserId,
+                type: NotificationType.TAG,
+                title: 'You were tagged!',
+                body: `${creator.name} tagged you in a new ${reel.mediaType === 'PHOTO' ? 'post' : 'reel'}.`,
+                senderId: creatorId,
+                senderAvatar: creator.avatar || null,
+              },
+            });
+
+            // Send Chat Message
+            try {
+              const chat = await this.chatService.getOrCreateChat(
+                creatorId,
+                taggedUserId,
+              );
+              await this.chatService.sendMessage(chat.id, creatorId, {
+                text: `Hey! I tagged you in my new ${reel.mediaType === 'PHOTO' ? 'post' : 'reel'}. /reels/${reel.id}`,
+                mediaUrl: reel.mediaUrl,
+              });
+            } catch (err) {
+              console.error('Failed to send chat message for tagging', err);
+            }
+          }
+        }
+      }
+    }
+
+    // Process hashtags asynchronously
+    if (dto.description) {
+      const hashtags = extractHashtags(dto.description);
+      this.hashtagsService.processHashtags(reel.id, hashtags).catch((err) => {
+        console.error('Failed to process hashtags for reel', err);
+      });
+    }
+
+    // Trigger referral check (first post requirement)
+   checkAndProcessReferral(this.prisma, creatorId, this.notificationsService).catch((err) => {
+      console.error('Referral process error on reel creation', err);
+    });
+
+    return reel;
+  }
+
+async getFeed(
+    cursor: string | null = null,
+    limit: number = 10,
+    category?: string,
+  ) {
+    const where: any = {
+      privacy: { in: ['Public', 'Everyone'] }, // Show public reels in the general feed
+      mediaType: 'PHOTO', // Home feed shows only image posts, not video reel covers
+      ...(category && category !== 'all' ? { category } : {}),
+    };
+
+    // Using Prisma cursor-based pagination
+    const reels = await this.prisma.reel.findMany({
+      where,
+      take: limit + 1, // Fetch one extra to determine if there's a next page
+      ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+      orderBy: { createdAt: 'desc' },
+      include: {
+        creator: {
+          select: {
+            id: true,
+            name: true,
+            username: true,
+            avatar: true,
+            isVerified: true,
+          },
+        },
+        taggedUsers: {
+          select: { id: true, username: true, avatar: true },
+        },
+        location: true,
+      },
+    });
+
+    let nextCursor: string | null = null;
+    if (reels.length > limit) {
+      const nextItem = reels.pop(); // Remove the extra item
+      nextCursor = nextItem?.id || null;
+    }
+
+    return {
+      reels,
+      nextCursor,
+    };
+  }
+
+  async getExploreFeed(
+    page: number = 1,
+    limit: number = 10,
+    category?: string,
+    excludeIds: string[] = [],
+  ) {
+    // We ignore skip (page) for the database query because we are randomizing
+    // We fetch a larger pool (e.g., 50) of recent reels that haven't been seen yet
+   const where: any = {
+      privacy: { in: ['Public', 'Everyone'] }, // Show public reels in explore
+      ...(category && category !== 'all' ? { category } : {}),
+    };
+
+    if (excludeIds.length > 0) {
+      where.id = { notIn: excludeIds };
+    }
+
+    const pool = await this.prisma.reel.findMany({
+      where,
+      take: 100, // Increased pool size for better randomness across large datasets
+      orderBy: { createdAt: 'desc' }, // Get recent ones to keep fresh
+      include: {
+        creator: {
+          select: {
+            id: true,
+            name: true,
+            username: true,
+            avatar: true,
+            isVerified: true,
+          },
+        },
+        taggedUsers: {
+          select: { id: true, username: true, avatar: true },
+        },
+        location: true,
+      },
+    });
+
+    // Return the requested limit, strictly ordered by createdAt desc
+    return pool.slice(0, limit);
+  }
+
+  async getFollowingFeed(userId: string, page: number = 1, limit: number = 10) {
+    const skip = (page - 1) * limit;
+
+    const follows = await this.prisma.follows.findMany({
+      where: { followerId: userId },
+      select: { followingId: true },
+    });
+    const followingIds = follows.map((f) => f.followingId);
+
+    console.log(`[getFollowingFeed] User ${userId} follows:`, followingIds);
+
+ const reels = await this.prisma.reel.findMany({
+      where: {
+        creatorId: { in: followingIds },
+        privacy: { in: ['Public', 'Friends'] },
+      },
+      skip,
+      take: limit,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        creator: {
+          select: {
+            id: true,
+            name: true,
+            username: true,
+            avatar: true,
+            isVerified: true,
+          },
+        },
+        taggedUsers: {
+          select: {
+            id: true,
+            username: true,
+            avatar: true,
+          },
+        },
+        location: true,
+      },
+    });
+
+    console.log(`[getFollowingFeed] Returning ${reels.length} reels.`);
+    return reels;
+  }
+
+async getUserReels(userId: string) {
+    const reels = await this.prisma.reel.findMany({
+      where: { creatorId: userId },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        creator: {
+          select: {
+            id: true,
+            name: true,
+            username: true,
+            avatar: true,
+            isVerified: true,
+          },
+        },
+        taggedUsers: {
+          select: {
+            id: true,
+            username: true,
+            avatar: true,
+          },
+        },
+        location: true,
+      },
+    });
+
+    const wallet = await this.prisma.wallet.findUnique({ where: { userId } });
+    if (!wallet) return reels.map(r => ({ ...r, viewEarnings: 0 }));
+
+    const ledgers = await this.prisma.walletLedger.findMany({
+   where: { walletId: wallet.id, source: 'VIEW_EARNING', reelId: { not: null } },
+select: { reelId: true, credit: true },
+    });
+
+    const earningsByReel: Record<string, number> = {};
+    for (const l of ledgers) {
+      if (l.reelId) {
+        earningsByReel[l.reelId] = (earningsByReel[l.reelId] || 0) + Number(l.credit);
+      }
+    }
+
+    return reels.map(r => ({ ...r, viewEarnings: earningsByReel[r.id] || 0 }));
+  }
+
+  async getReelById(reelId: string) {
+    console.log('getReelById called with:', reelId);
+    const reel = await this.prisma.reel.findUnique({
+      where: { id: reelId },
+      include: {
+        creator: {
+          select: {
+            id: true,
+            name: true,
+            username: true,
+            avatar: true,
+            isVerified: true,
+          },
+        },
+        taggedUsers: {
+          select: {
+            id: true,
+            username: true,
+            avatar: true,
+          },
+        },
+        location: true,
+      },
+    });
+
+    if (!reel) throw new NotFoundException('Reel not found');
+    return reel;
+  }
+
+  async getNearbyFeed(
+    lat: number,
+    lng: number,
+    radiusKm: number = 50,
+    page: number = 1,
+    limit: number = 10,
+  ) {
+    const offset = (page - 1) * limit;
+    // Using raw SQL Haversine formula for distance calculation without PostGIS
+    return this.prisma.$queryRaw`
+      SELECT r.*, u.username, u.avatar, u."isVerified",
+      (6371 * acos(cos(radians(${lat})) * cos(radians(r.latitude)) * cos(radians(r.longitude) - radians(${lng})) + sin(radians(${lat})) * sin(radians(r.latitude)))) AS distance
+      FROM "Reel" r
+      JOIN "User" u ON r."creatorId" = u.id
+      WHERE r.latitude IS NOT NULL AND r.longitude IS NOT NULL AND r.privacy = 'Public'
+      HAVING (6371 * acos(cos(radians(${lat})) * cos(radians(r.latitude)) * cos(radians(r.longitude) - radians(${lng})) + sin(radians(${lat})) * sin(radians(r.latitude)))) < ${radiusKm}
+      ORDER BY distance ASC
+      LIMIT ${limit} OFFSET ${offset}
+    `;
+  }
+
+  async toggleLike(reelId: string, userId: string) {
+    const reelCheck = await this.prisma.reel.findUnique({
+      where: { id: reelId },
+    });
+    if (!reelCheck) throw new NotFoundException('Reel not found');
+
+    const existingLike = await this.prisma.like.findUnique({
+      where: { reelId_userId: { reelId, userId } },
+    });
+
+    if (existingLike) {
+      await this.prisma.like.delete({ where: { id: existingLike.id } });
+      const reel = await this.prisma.reel.update({
+        where: { id: reelId },
+        data: { likesCount: { decrement: 1 } },
+      });
+      await this.prisma.user.update({
+        where: { id: reel.creatorId },
+        data: { totalLikesReceived: { decrement: 1 } },
+      });
+
+      if (reel.challengeId) {
+        await this.prisma.challengeParticipant
+          .update({
+            where: {
+              challengeId_userId: {
+                challengeId: reel.challengeId,
+                userId: reel.creatorId,
+              },
+            },
+            data: { score: { decrement: 5 } },
+          })
+          .catch(() => null);
+        this.challengesGateway.broadcastLeaderboardUpdate(reel.challengeId);
+      }
+
+      return { liked: false };
+    } else {
+      try {
+        await this.prisma.like.create({ data: { reelId, userId } });
+        const reel = await this.prisma.reel.update({
+          where: { id: reelId },
+          data: { likesCount: { increment: 1 } },
+        });
+        await this.prisma.user.update({
+          where: { id: reel.creatorId },
+          data: { totalLikesReceived: { increment: 1 } },
+        });
+
+        if (reel.challengeId) {
+          await this.prisma.challengeParticipant
+            .update({
+              where: {
+                challengeId_userId: {
+                  challengeId: reel.challengeId,
+                  userId: reel.creatorId,
+                },
+              },
+              data: { score: { increment: 5 } },
+            })
+            .catch(() => null);
+          this.challengesGateway.broadcastLeaderboardUpdate(reel.challengeId);
+        }
+
+        // Liker Rewards (1 coin per 2 likes, max 50 coins/day)
+        const today = new Date();
+        const startOfDay = new Date(
+          today.getFullYear(),
+          today.getMonth(),
+          today.getDate(),
+        );
+        const likesToday = await this.prisma.like.count({
+          where: { userId, createdAt: { gte: startOfDay } },
+        });
+
+        if (likesToday % 2 === 0) {
+          const todayStr = today.toISOString().split('T')[0];
+          const referenceId = `like_reward_${userId}_${todayStr}`;
+
+          let likerWallet = await this.prisma.wallet.findUnique({
+            where: { userId },
+          });
+          if (!likerWallet)
+            likerWallet = await this.prisma.wallet.create({
+              data: { userId, coinBalance: 0 },
+            });
+
+          const existingLikeTx = await this.prisma.transaction.findFirst({
+            where: { referenceId, walletId: likerWallet.id },
+          });
+
+          const maxLikeRewards = 50;
+
+          if (!existingLikeTx) {
+            await this.prisma.transaction.create({
+              data: {
+                walletId: likerWallet.id,
+                type: 'CHALLENGE_REWARD',
+                amount: 1,
+                currency: 'COINS',
+                status: 'SUCCESS',
+                referenceId,
+                description: 'Daily Like Rewards',
+              },
+            });
+            await this.prisma.wallet.update({
+              where: { id: likerWallet.id },
+              data: { coinBalance: { increment: 1 } },
+            });
+          } else if (existingLikeTx.amount < maxLikeRewards) {
+            await this.prisma.transaction.update({
+              where: { id: existingLikeTx.id },
+              data: { amount: { increment: 1 } },
+            });
+            await this.prisma.wallet.update({
+              where: { id: likerWallet.id },
+              data: { coinBalance: { increment: 1 } },
+            });
+          }
+        }
+
+        const user = await this.prisma.user.findUnique({
+          where: { id: userId },
+        });
+
+        if (reel.creatorId !== userId && user) {
+          try {
+            const notification = await this.prisma.notification.create({
+              data: {
+                userId: reelCheck.creatorId,
+                type: NotificationType.LIKE,
+                title: 'New Like',
+                body: `liked your ${reelCheck.mediaType === 'PHOTO' ? 'post' : 'reel'}`,
+                senderId: userId,
+                senderAvatar: user.avatar || null,
+                postId: reelId,
+                metaData: {
+                  targetType: reelCheck.mediaType === 'PHOTO' ? 'POST' : 'REEL',
+                  reelThumbnail: reelCheck.thumbnailUrl,
+                },
+              },
+            });
+          this.notificationsGateway.sendNotificationToUser(
+              reel.creatorId,
+              notification,
+            );
+            await this.notificationsService.sendPushNotification(
+              reel.creatorId,
+              'New Like',
+              `${user.username} liked your ${reelCheck.mediaType === 'PHOTO' ? 'post' : 'reel'}`,
+            ).catch(() => {});
+          } catch (error) {
+            console.error('Failed to create like notification:', error);
+          }
+        }
+      } catch (error: any) {
+        // If it's a unique constraint violation (P2002), the like already exists.
+        // We can just ignore it to prevent 500 errors on concurrent rapid clicks.
+        if (error.code === 'P2002') {
+          console.warn('Like already exists (concurrent request caught).');
+        } else {
+          throw error;
+        }
+      }
+      return { liked: true };
+    }
+  }
+
+  async toggleSave(reelId: string, userId: string) {
+    const existingSave = await this.prisma.save.findUnique({
+      where: { reelId_userId: { reelId, userId } },
+    });
+
+    if (existingSave) {
+      await this.prisma.save.delete({ where: { id: existingSave.id } });
+      await this.prisma.reel.update({
+        where: { id: reelId },
+        data: { savesCount: { decrement: 1 } },
+      });
+      return { saved: false };
+    } else {
+      try {
+        await this.prisma.save.create({ data: { reelId, userId } });
+        await this.prisma.reel.update({
+          where: { id: reelId },
+          data: { savesCount: { increment: 1 } },
+        });
+      } catch (error: any) {
+        if (error.code === 'P2002') {
+          console.warn('Save already exists (concurrent request caught).');
+        } else {
+          throw error;
+        }
+      }
+      return { saved: true };
+    }
+  }
+
+  async addComment(reelId: string, userId: string, dto: AddCommentDto) {
+    const comment = await this.prisma.comment.create({
+      data: {
+        text: dto.text,
+        reelId,
+        userId,
+        parentId: dto.parentId || null,
+      },
+      include: {
+        user: {
+          select: { id: true, name: true, username: true, avatar: true },
+        },
+      },
+    });
+
+    const reel = await this.prisma.reel.update({
+      where: { id: reelId },
+      data: { commentsCount: { increment: 1 } },
+    });
+
+    if (reel.challengeId) {
+      await this.prisma.challengeParticipant
+        .update({
+          where: {
+            challengeId_userId: {
+              challengeId: reel.challengeId,
+              userId: reel.creatorId,
+            },
+          },
+          data: { score: { increment: 10 } },
+        })
+        .catch(() => null);
+      this.challengesGateway.broadcastLeaderboardUpdate(reel.challengeId);
+    }
+
+    // Notify Reel Creator (if not self and not a reply to someone else)
+    if (reel.creatorId !== userId && comment.user && !dto.parentId) {
+      try {
+        const notification = await this.prisma.notification.create({
+          data: {
+            userId: reel.creatorId,
+            type: NotificationType.COMMENT,
+            title: 'New Comment',
+            body: `commented: "${dto.text}"`,
+            senderId: userId,
+            senderAvatar: comment.user.avatar || null,
+            postId: reelId,
+            commentId: comment.id,
+            metaData: {
+              targetType: 'REEL',
+              reelThumbnail: reel.thumbnailUrl,
+              commentText: dto.text,
+            },
+          },
+        });
+       this.notificationsGateway.sendNotificationToUser(
+          reel.creatorId,
+          notification,
+        );
+        await this.notificationsService.sendPushNotification(
+          reel.creatorId,
+          'New Comment',
+          `${comment.user.username} commented: "${dto.text}"`,
+        ).catch(() => {});
+      } catch (error) {
+        console.error('Failed to create comment notification:', error);
+      }
+    }
+
+    // Handle Mentions and Reply Notification
+    const mentionRegex = /@([\w.-]+)/g;
+    // Extract unique usernames
+    const rawMentions = [...dto.text.matchAll(mentionRegex)].map((m) => m[1]);
+    const mentions = Array.from(new Set(rawMentions));
+
+    // If it's a reply, notify the parent comment's user
+    if (dto.parentId) {
+      try {
+        const parentComment = await this.prisma.comment.findUnique({
+          where: { id: dto.parentId },
+          include: { user: true },
+        });
+        if (parentComment && parentComment.userId !== userId) {
+          const notification = await this.prisma.notification.create({
+            data: {
+              userId: parentComment.userId,
+              type: NotificationType.REPLY,
+              title: 'New Reply',
+              body: `${comment.user.name} replied to your comment.`,
+              senderId: userId,
+              senderAvatar: comment.user.avatar || null,
+              postId: reelId,
+              commentId: parentComment.id,
+              replyId: comment.id,
+              metaData: {
+                targetType: 'REEL',
+                reelThumbnail: reel.thumbnailUrl,
+                commentText: dto.text,
+              },
+            },
+          });
+          this.notificationsGateway.sendNotificationToUser(
+            parentComment.userId,
+            notification,
+          );
+        }
+      } catch (error) {
+        console.error('Failed to create reply notification:', error);
+      }
+    }
+
+    // Send Mention Notifications
+    if (mentions.length > 0) {
+      try {
+        const mentionedUsers = await this.prisma.user.findMany({
+          where: { username: { in: mentions } },
+        });
+        for (const mUser of mentionedUsers) {
+          if (mUser.id !== userId) {
+            // Self Mention Protection
+            const notification = await this.prisma.notification.create({
+              data: {
+                userId: mUser.id,
+                type: NotificationType.MENTION,
+                title: 'You were mentioned',
+                body: `${comment.user.name} mentioned you in a comment.`,
+                senderId: userId,
+                senderAvatar:
+                  comment.user.avatar || null,
+                postId: reelId,
+                commentId: dto.parentId ? dto.parentId : comment.id,
+                replyId: dto.parentId ? comment.id : undefined,
+                metaData: {
+                  targetType: 'REEL',
+                  reelThumbnail: reel.thumbnailUrl,
+                  commentText: dto.text,
+                },
+              },
+            });
+            this.notificationsGateway.sendNotificationToUser(
+              mUser.id,
+              notification,
+            );
+          }
+        }
+      } catch (error) {
+        console.error('Failed to create mention notifications:', error);
+      }
+    }
+
+    return comment;
+  }
+
+  async getComments(reelId: string, userId: string) {
+    const comments = await this.prisma.comment.findMany({
+      where: { reelId, parentId: null }, // Only fetch top-level comments
+      orderBy: { createdAt: 'desc' },
+      include: {
+        likes: {
+          where: { userId },
+        },
+        user: {
+          select: {
+            id: true,
+            name: true,
+            username: true,
+            avatar: true,
+            isVerified: true,
+          },
+        },
+        replies: {
+          orderBy: { createdAt: 'asc' },
+          include: {
+            likes: {
+              where: { userId },
+            },
+            user: {
+              select: {
+                id: true,
+                name: true,
+                username: true,
+                avatar: true,
+                isVerified: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const mapCommentWithLike = (c: any) => ({
+      ...c,
+      isLiked: c.likes && c.likes.length > 0,
+      likes: undefined, // remove from response
+      replies: c.replies
+        ? c.replies.map((r: any) => ({
+            ...r,
+            isLiked: r.likes && r.likes.length > 0,
+            likes: undefined,
+          }))
+        : [],
+    });
+
+    return comments.map(mapCommentWithLike);
+  }
+
+  async toggleCommentLike(commentId: string, userId: string) {
+    const existingLike = await this.prisma.commentLike.findUnique({
+      where: { commentId_userId: { commentId, userId } },
+    });
+
+    if (existingLike) {
+      await this.prisma.commentLike.delete({ where: { id: existingLike.id } });
+      await this.prisma.comment.update({
+        where: { id: commentId },
+        data: { likesCount: { decrement: 1 } },
+      });
+
+      // Soft delete like notification
+      try {
+        await this.prisma.notification.updateMany({
+          where: {
+            type: NotificationType.COMMENT_LIKE,
+            commentId: commentId,
+            senderId: userId,
+          },
+          data: { isActive: false },
+        });
+      } catch (error) {
+        console.error(
+          'Failed to soft delete comment_like notification:',
+          error,
+        );
+      }
+
+      return { liked: false };
+    } else {
+      try {
+        await this.prisma.commentLike.create({ data: { commentId, userId } });
+   } catch (error: any) {
+        if (error.code === 'P2002') return { liked: true };
+        throw error;
+      }
+      const comment = await this.prisma.comment.update({
+        where: { id: commentId },
+        data: { likesCount: { increment: 1 } },
+        include: { reel: { select: { thumbnailUrl: true } } },
+      });
+      const user = await this.prisma.user.findUnique({ where: { id: userId } });
+
+      if (comment.userId !== userId && user) {
+        try {
+          const notification = await this.prisma.notification.create({
+            data: {
+              userId: comment.userId,
+              type: NotificationType.COMMENT_LIKE,
+              title: 'Comment Liked',
+              body: `${user.name} liked your comment.`,
+              senderId: userId,
+              senderAvatar: user.avatar || null,
+              postId: comment.reelId,
+              commentId: comment.id,
+              isActive: true,
+              metaData: {
+                targetType: 'REEL',
+                reelThumbnail: comment.reel?.thumbnailUrl,
+                commentText: comment.text,
+              },
+            },
+          });
+          this.notificationsGateway.sendNotificationToUser(
+            comment.userId,
+            notification,
+          );
+       } catch (error: any) {
+          console.error('Failed to create comment_like notification:', error);
+          if (error.code === 'P2002') {
+            await this.prisma.notification.updateMany({
+              where: {
+                type: NotificationType.COMMENT_LIKE,
+                commentId: comment.id,
+                senderId: userId,
+              },
+              data: { isActive: true, updatedAt: new Date() },
+            });
+          }
+        }
+      }
+      return { liked: true };
+    }
+  }
+
+  async incrementView(
+    reelId: string,
+    userId?: string,
+    metrics?: {
+      deviceId?: string;
+      sessionId?: string;
+      ipHash?: string;
+      country?: string;
+      state?: string;
+      city?: string;
+      trafficSource?: string;
+      watchDuration?: number;
+      completionPercent?: number;
+    },
+  ) {
+    const reel = await this.prisma.reel.findUnique({ where: { id: reelId } });
+    if (!reel) throw new NotFoundException('Reel not found');
+
+    // 1. Always log the raw ViewEvent for analytics and future fraud audits
+    await this.prisma.viewEvent.create({
+      data: {
+        reelId,
+        userId,
+        deviceId: metrics?.deviceId,
+        sessionId: metrics?.sessionId,
+        ipHash: metrics?.ipHash,
+        country: metrics?.country,
+        state: metrics?.state,
+        city: metrics?.city,
+        trafficSource: metrics?.trafficSource,
+        watchDuration: metrics?.watchDuration || 0,
+        completionPercent: metrics?.completionPercent || 0.0,
+      },
+    });
+
+    let isValidForEarning = false;
+
+    if (userId && reel.creatorId === userId) {
+      return { success: true, ignored: true, reason: 'creator' };
+    }
+
+    // In production, we check if watchDuration >= 10000ms
+    const isValidDuration = (metrics?.watchDuration ?? 10000) >= 10000;
+
+    if (userId && isValidDuration) {
+      // Check if user already has a ValidView for this reel
+      const existingValidView = await this.prisma.validView.findUnique({
+        where: { reelId_userId: { reelId, userId } },
+      });
+
+    if (!existingValidView) {
+        let validView;
+        try {
+          validView = await this.prisma.validView.create({
+            data: {
+              reelId,
+              userId,
+              deviceId: metrics?.deviceId,
+            },
+          });
+        } catch (error: any) {
+          if (error.code === 'P2002') {
+            // Same deviceId already has a ValidView for this reel under a different
+            // account — treat as already-counted instead of crashing the request.
+            this.logger.warn(`ValidView device conflict for reel ${reelId}, device ${metrics?.deviceId}`);
+            return { success: true, isValidForEarning: false, reason: 'duplicate_device' };
+          }
+          throw error;
+        }
+
+      isValidForEarning = true;
+
+        this.viewEarningsQueue.add(
+          'process-view',
+          {
+            validViewId: validView.id,
+            reelId,
+            creatorId: reel.creatorId,
+            watchDuration: metrics?.watchDuration ?? 10000,
+          },
+          {
+            attempts: 3,
+            backoff: { type: 'exponential', delay: 5000 },
+            removeOnComplete: 100,
+            removeOnFail: 50,
+          },
+        ).catch((err) => {
+          this.logger.warn(`Failed to enqueue view job for reel ${reelId}: ${err.message}`);
+        });
+
+        // Award Coins to Viewer for watching (10 coins per view, capped at 200/day)
+        let viewerWallet = await this.prisma.wallet.findUnique({
+          where: { userId },
+        });
+        if (!viewerWallet) {
+          viewerWallet = await this.prisma.wallet.create({
+            data: { userId, coinBalance: 0 },
+          });
+        }
+
+        // Record Coin Earning Transaction - Grouped Daily to prevent history spam
+        const todayStr = new Date().toISOString().split('T')[0];
+        const referenceId = `view_reward_${userId}_${todayStr}`;
+
+        const existingTx = await this.prisma.transaction.findFirst({
+          where: { referenceId, walletId: viewerWallet.id },
+        });
+
+        const viewReward = 10;
+        const maxDailyViews = 200;
+
+        if (!existingTx) {
+          await this.prisma.transaction.create({
+            data: {
+              walletId: viewerWallet.id,
+              type: 'AD_REVENUE',
+              amount: viewReward,
+              currency: 'COINS',
+              status: 'SUCCESS',
+              referenceId,
+              description: 'Daily Watch Rewards',
+            },
+          });
+          await this.prisma.wallet.update({
+            where: { id: viewerWallet.id },
+            data: { coinBalance: { increment: viewReward } },
+          });
+        } else if (existingTx.amount < maxDailyViews) {
+          await this.prisma.transaction.update({
+            where: { id: existingTx.id },
+            data: { amount: { increment: viewReward } },
+          });
+          await this.prisma.wallet.update({
+            where: { id: viewerWallet.id },
+            data: { coinBalance: { increment: viewReward } },
+          });
+        }
+
+        // Also record WatchHistory
+        await this.prisma.watchHistory.upsert({
+          where: { userId_reelId: { userId, reelId } },
+          create: { userId, reelId },
+          update: { watchedAt: new Date() },
+        });
+      } else {
+        // Just update WatchHistory time
+        await this.prisma.watchHistory.update({
+          where: { userId_reelId: { userId, reelId } },
+          data: { watchedAt: new Date() },
+        });
+      }
+    }
+
+    // 3. Increment public views count only if duration is valid
+    if (isValidDuration) {
+      await this.prisma.reel.update({
+        where: { id: reelId },
+        data: { viewsCount: { increment: 1 } },
+      });
+    }
+
+    // 4. Update Challenge Leaderboard if applicable
+    if (reel.challengeId && isValidForEarning && userId) {
+      await this.prisma.challengeParticipant
+        .update({
+          where: {
+            challengeId_userId: {
+              challengeId: reel.challengeId,
+              userId: reel.creatorId,
+            },
+          },
+          data: { score: { increment: 1 } },
+        })
+        .catch(() => null);
+      this.challengesGateway.broadcastLeaderboardUpdate(reel.challengeId);
+    }
+
+    return { success: true, isValidForEarning };
+  }
+
+  async getLikedReels(userId: string) {
+    const likes = await this.prisma.like.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        reel: {
+          include: {
+            creator: {
+              select: {
+                id: true,
+                name: true,
+                username: true,
+                avatar: true,
+                isVerified: true,
+              },
+            },
+            location: true,
+          },
+        },
+      },
+    });
+    return likes.map((l) => l.reel);
+  }
+
+  async getWatchHistory(userId: string) {
+    const history = await this.prisma.watchHistory.findMany({
+      where: { userId },
+      orderBy: { watchedAt: 'desc' },
+      include: {
+        reel: {
+          include: {
+            creator: {
+              select: {
+                id: true,
+                name: true,
+                username: true,
+                avatar: true,
+                isVerified: true,
+              },
+            },
+            location: true,
+          },
+        },
+      },
+    });
+    return history.map((h) => h.reel);
+  }
+
+  async updateReel(reelId: string, userId: string, dto: any) {
+    const reel = await this.prisma.reel.findUnique({ where: { id: reelId } });
+    if (!reel) throw new NotFoundException('Reel not found');
+    if (reel.creatorId !== userId)
+      throw new UnauthorizedException('You can only edit your own reels');
+
+    const { location, taggedUserIds, ...rest } = dto;
+
+    let validTaggedUserIds: string[] | undefined;
+    if (taggedUserIds !== undefined) {
+      if (taggedUserIds === null || taggedUserIds.length === 0) {
+        validTaggedUserIds = [];
+      } else {
+        const uniqueTags = [...new Set(taggedUserIds as string[])].slice(0, 10);
+        const blocks = await this.prisma.block.findMany({
+          where: {
+            OR: [
+              { blockerId: userId, blockedId: { in: uniqueTags } },
+              { blockerId: { in: uniqueTags }, blockedId: userId },
+            ],
+          },
+        });
+        const blockedIds = new Set(
+          blocks.map((b) =>
+            b.blockerId === userId ? b.blockedId : b.blockerId,
+          ),
+        );
+        validTaggedUserIds = uniqueTags.filter((id) => !blockedIds.has(id));
+      }
+    }
+
+    return this.prisma.reel.update({
+      where: { id: reelId },
+      data: {
+        ...rest,
+        ...(validTaggedUserIds !== undefined && {
+          taggedUsers: {
+            set: validTaggedUserIds.map((id) => ({ id })),
+          },
+        }),
+        ...(location !== undefined && {
+          location:
+            location === null
+              ? { delete: true }
+              : {
+                  upsert: {
+                    create: {
+                      name: location.locationName,
+                      latitude: location.latitude,
+                      longitude: location.longitude,
+                      placeId: location.placeId,
+                    },
+                    update: {
+                      name: location.locationName,
+                      latitude: location.latitude,
+                      longitude: location.longitude,
+                      placeId: location.placeId,
+                    },
+                  },
+                },
+        }),
+      },
+      include: {
+        creator: { select: { id: true, username: true, avatar: true } },
+        taggedUsers: { select: { id: true, username: true, avatar: true } },
+        location: true,
+      },
+    });
+  }
+
+  async deleteReel(reelId: string, userId: string) {
+    const reel = await this.prisma.reel.findUnique({ where: { id: reelId } });
+    if (!reel) {
+      return { success: true, message: 'Reel already deleted' };
+    }
+    if (reel.creatorId !== userId) {
+      throw new UnauthorizedException('You can only delete your own reels');
+    }
+
+    // Remove hashtags and decrement counts
+    await this.hashtagsService.removeHashtagsForReel(reelId);
+
+    return this.prisma.reel.delete({
+      where: { id: reelId },
+    });
+  }
+}
