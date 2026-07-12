@@ -67,7 +67,7 @@ export class AdminService {
     };
   }
 
-  async getDashboardStats(adminId: string) {
+async getDashboardStats(adminId: string) {
     const totalUsers = await this.prisma.user.count({
       where: { role: 'USER' },
     });
@@ -79,7 +79,24 @@ export class AdminService {
       where: { type: 'WITHDRAWAL', status: 'PENDING' },
     });
 
-    return { totalUsers, totalCreators, totalReels, pendingWithdrawals };
+const coinsAgg = await this.prisma.transaction.aggregate({
+      where: { type: 'COIN_RECHARGE', status: 'SUCCESS' },
+      _sum: { amount: true },
+    });
+
+    const giftAgg = await this.prisma.transaction.aggregate({
+      where: { type: 'GIFT_SEND', status: 'SUCCESS' },
+      _sum: { amount: true },
+    });
+
+    return {
+      totalUsers,
+      totalCreators,
+      totalReels,
+      pendingWithdrawals,
+      distributedCoins: coinsAgg._sum.amount || 0,
+      giftRevenue: giftAgg._sum.amount || 0,
+    };
   }
 
   async getPendingKyc() {
