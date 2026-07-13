@@ -491,17 +491,12 @@ async approveReel(reelId: string, status: 'APPROVED' | 'REJECTED', reason?: stri
 
       });
 
-     await this.notificationsService.sendPushNotification(
-        txData.winnerUserId,
-        'You Won a Challenge!',
-        `Congratulations! You won ₹${txData.rewardAmount} in the ${txData.challenge.title} challenge.`,
-      ).catch(() => {});
-
-     await this.notificationsService.sendPushNotification(
-        txData.winnerUserId,
-        'You Won a Challenge!',
-        `Congratulations! You won ₹${txData.rewardAmount} in the ${txData.challenge.title} challenge.`,
-      ).catch(() => {});
+await this.notificationsService.sendPushNotification(
+      txData.winnerUserId,
+      'You Won a Challenge!',
+      `Congratulations! You won ₹${txData.rewardAmount} in the ${txData.challenge.title} challenge.`,
+      { type: 'CHALLENGE_WIN', targetId: txData.challengeId },
+    ).catch(() => {});
 
       return { success: true, message: 'Reward processed successfully' };
     } catch (error) {

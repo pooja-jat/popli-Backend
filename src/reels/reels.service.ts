@@ -143,7 +143,7 @@ export class ReelsService {
         for (const taggedUserId of validTaggedUserIds) {
           if (taggedUserId !== creatorId) {
             // Send Notification
-            await this.prisma.notification.create({
+    const tagNotif = await this.prisma.notification.create({
               data: {
                 userId: taggedUserId,
                 type: NotificationType.TAG,
@@ -153,6 +153,13 @@ export class ReelsService {
                 senderAvatar: creator.avatar || null,
               },
             });
+           this.notificationsGateway.sendNotificationToUser(taggedUserId, tagNotif).catch(() => {});
+         await this.notificationsService.sendPushNotification(
+              taggedUserId,
+              'You were tagged!',
+              `${creator.name} tagged you in a new ${reel.mediaType === 'PHOTO' ? 'post' : 'reel'}.`,
+              { type: 'TAG', reelId: reel.id },
+            ).catch(() => {});
 
             // Send Chat Message
             try {
@@ -559,10 +566,11 @@ select: { reelId: true, credit: true },
               reel.creatorId,
               notification,
             );
-            await this.notificationsService.sendPushNotification(
+          await this.notificationsService.sendPushNotification(
               reel.creatorId,
               'New Like',
               `${user.username} liked your ${reelCheck.mediaType === 'PHOTO' ? 'post' : 'reel'}`,
+              { type: 'LIKE', reelId: reelId },
             ).catch(() => {});
           } catch (error) {
             console.error('Failed to create like notification:', error);
@@ -670,10 +678,11 @@ select: { reelId: true, credit: true },
           reel.creatorId,
           notification,
         );
-        await this.notificationsService.sendPushNotification(
+      await this.notificationsService.sendPushNotification(
           reel.creatorId,
           'New Comment',
           `${comment.user.username} commented: "${dto.text}"`,
+          { type: 'COMMENT', reelId: reelId },
         ).catch(() => {});
       } catch (error) {
         console.error('Failed to create comment notification:', error);
@@ -712,10 +721,16 @@ select: { reelId: true, credit: true },
               },
             },
           });
-          this.notificationsGateway.sendNotificationToUser(
+        this.notificationsGateway.sendNotificationToUser(
             parentComment.userId,
             notification,
           );
+     await this.notificationsService.sendPushNotification(
+            parentComment.userId,
+            'New Reply',
+            `${comment.user.name} replied to your comment.`,
+            { type: 'REPLY', reelId: reelId },
+          ).catch(() => {});
         }
       } catch (error) {
         console.error('Failed to create reply notification:', error);
@@ -750,10 +765,16 @@ select: { reelId: true, credit: true },
                 },
               },
             });
-            this.notificationsGateway.sendNotificationToUser(
+       this.notificationsGateway.sendNotificationToUser(
               mUser.id,
               notification,
             );
+          await this.notificationsService.sendPushNotification(
+              mUser.id,
+              'You were mentioned',
+              `${comment.user.name} mentioned you in a comment.`,
+              { type: 'MENTION', reelId: reelId },
+            ).catch(() => {});
           }
         }
       } catch (error) {
@@ -885,6 +906,12 @@ select: { reelId: true, credit: true },
             comment.userId,
             notification,
           );
+         await this.notificationsService.sendPushNotification(
+            comment.userId,
+            'Comment Liked',
+            `${user.name} liked your comment.`,
+            { type: 'COMMENT_LIKE', reelId: comment.reelId },
+          ).catch(() => {});
        } catch (error: any) {
           console.error('Failed to create comment_like notification:', error);
           if (error.code === 'P2002') {

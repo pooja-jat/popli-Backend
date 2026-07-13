@@ -63,6 +63,7 @@ model User {
   storyReactions              StoryReaction[]
   storyViews                  StoryViewer[]
   ticketsSubmitted            SupportTicket[]              @relation("TicketCreator")
+  ticketMessages              TicketMessage[]              @relation("TicketMessages")
   preferences                 UserPreference?
   wallet                      Wallet?
   watchHistory                WatchHistory[]
@@ -454,16 +455,27 @@ model Report {
 }
 
 model SupportTicket {
-  id          String       @id @default(uuid())
+  id          String          @id @default(uuid())
   creatorId   String
   subject     String
   description String
-  status      TicketStatus @default(OPEN)
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  creator     User         @relation("TicketCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  status      TicketStatus    @default(OPEN)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  creator     User            @relation("TicketCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  messages    TicketMessage[]
 }
 
+model TicketMessage {
+  id        String        @id @default(uuid())
+  ticketId  String
+  senderId  String
+  senderRole String       @default("USER")
+  message   String
+  createdAt DateTime      @default(now())
+  ticket    SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  sender    User          @relation("TicketMessages", fields: [senderId], references: [id], onDelete: Cascade)
+}
 model Interest {
   id       String  @id @default(uuid())
   name     String  @unique
@@ -728,6 +740,8 @@ enum Role {
   MODERATOR
   ADMIN
 }
+
+
 
 enum MediaType {
   PHOTO

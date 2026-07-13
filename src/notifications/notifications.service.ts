@@ -1,9 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import * as admin from 'firebase-admin';
-
 @Injectable()
 export class NotificationsService {
+  public gateway: any = null; // Set by NotificationsGateway after init
+
   constructor(private prisma: PrismaService) {}
 
   async getNotifications(userId: string, take: number = 30, cursor?: string) {
@@ -200,11 +201,19 @@ async createAndPush(data: any, title: string, body: string) {
     const notif = await this.prisma.notification.create({ data }).catch(() => null);
     if (notif) {
       await this.sendPushNotification(data.userId, title, body).catch(() => {});
+      // Socket emit — lazy import to avoid circular dependency
+      try {
+        const { NotificationsGateway } = await import('./notifications.gateway');
+        // Gateway is already instantiated via DI — use the service reference
+        if (this.gateway) {
+          await this.gateway.sendNotificationToUser(data.userId, notif);
+        }
+      } catch (e) {}
     }
     return notif;
   }
 
-  async sendPushNotification(userId: string, title: string, body: string) {
+async sendPushNotification(userId: string, title: string, body: string, extraData: Record<string, string> = {}) {
     try {
       const user = await this.prisma.user.findUnique({
         where: { id: userId },
@@ -213,9 +222,10 @@ async createAndPush(data: any, title: string, body: string) {
 
       if (!user?.deviceToken || !admin.apps.length) return;
 
-      await admin.messaging().send({
+ await admin.messaging().send({
         token: user.deviceToken,
         notification: { title, body },
+        data: extraData,
         android: { priority: 'high' },
         apns: { payload: { aps: { sound: 'default' } } },
       });

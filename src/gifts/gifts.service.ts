@@ -7,12 +7,14 @@ import { PrismaService } from '../prisma/prisma.service';
 import { SendGiftDto } from './dto/gifts.dto';
 import { Prisma } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
 
 @Injectable()
 export class GiftsService {
   constructor(
     private prisma: PrismaService,
     private notificationsService: NotificationsService,
+    private notificationsGateway: NotificationsGateway,
   ) {}
 
   async getGifts() {
@@ -171,11 +173,23 @@ export class GiftsService {
       console.error('Failed to send gift notification:', err);
     }
 
-    await this.notificationsService.sendPushNotification(
+await this.notificationsService.sendPushNotification(
       dto.receiverId,
       'You received a gift!',
       `Someone sent you a ${result.gift.name}!`,
+      { type: 'GIFT', reelId: dto.reelId || '' },
     ).catch(() => {});
+
+    // Socket emit for gift notification
+    try {
+      const notif = await this.prisma.notification.findFirst({
+        where: { userId: dto.receiverId, senderId: senderId, type: 'GIFT' as any },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (notif) {
+        this.notificationsGateway.sendNotificationToUser(dto.receiverId, notif).catch(() => {});
+      }
+    } catch (e) {}
 
     return result;
   }

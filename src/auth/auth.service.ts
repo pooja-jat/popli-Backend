@@ -170,14 +170,16 @@ constructor(
             }
           });
           // Notify Referrer
-          await this.prisma.notification.create({
-            data: {
+         await this.notificationsService.createAndPush(
+            {
               userId: referredById,
               type: 'SYSTEM',
               title: 'Referral Bonus!',
-              body: 'You earned ₹100 because your friend successfully joined Popli!'
-            }
-          });
+              body: 'You earned ₹100 because your friend successfully joined Popli!',
+            },
+            'Referral Bonus!',
+            'You earned ₹100 because your friend successfully joined Popli!',
+          ).catch(() => {});
         }
 
        // 2. Credit Referred (New User) ₹25
@@ -199,14 +201,16 @@ constructor(
             }
           });
           // Notify Referred User
-          await this.prisma.notification.create({
-            data: {
+        await this.notificationsService.createAndPush(
+            {
               userId: user.id,
               type: 'SYSTEM',
               title: 'Welcome Bonus!',
-              body: 'You earned ₹25 for signing up with a referral code!'
-            }
-          });
+              body: 'You earned ₹25 for signing up with a referral code!',
+            },
+            'Welcome Bonus!',
+            'You earned ₹25 for signing up with a referral code!',
+          ).catch(() => {});
         }
       }
     }
@@ -418,14 +422,16 @@ async googleLogin(dto: GoogleLoginDto, ip: string, userAgent: string) {
               description: 'Referral Bonus for a successful signup (locked)'
             }
           });
-          await this.prisma.notification.create({
-            data: {
+      await this.notificationsService.createAndPush(
+            {
               userId: referredById,
               type: 'SYSTEM',
               title: 'Referral Bonus!',
-              body: 'You earned ₹100 because your friend successfully joined Popli!'
-            }
-          });
+              body: 'You earned ₹100 because your friend successfully joined Popli!',
+            },
+            'Referral Bonus!',
+            'You earned ₹100 because your friend successfully joined Popli!',
+          ).catch(() => {});
         }
 
         const myWallet = await this.prisma.wallet.findUnique({ where: { userId: user.id } });
@@ -445,14 +451,16 @@ async googleLogin(dto: GoogleLoginDto, ip: string, userAgent: string) {
               description: 'Welcome Bonus for using a referral code (locked)'
             }
           });
-          await this.prisma.notification.create({
-            data: {
+         await this.notificationsService.createAndPush(
+            {
               userId: user.id,
               type: 'SYSTEM',
               title: 'Welcome Bonus!',
-              body: 'You earned ₹25 for signing up with a referral code!'
-            }
-          });
+              body: 'You earned ₹25 for signing up with a referral code!',
+            },
+            'Welcome Bonus!',
+            'You earned ₹25 for signing up with a referral code!',
+          ).catch(() => {});
         }
       }
     }

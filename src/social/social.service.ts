@@ -2,12 +2,14 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationType } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
 
 @Injectable()
 export class SocialService {
   constructor(
     private prisma: PrismaService,
     private notificationsService: NotificationsService,
+    private notificationsGateway: NotificationsGateway,
   ) {}
 
   async toggleFollow(followerId: string, followingId: string) {
@@ -47,8 +49,8 @@ export class SocialService {
         where: { id: followerId },
       });
 
-    if (follower) {
-        await this.prisma.notification.create({
+if (follower) {
+        const notif = await this.prisma.notification.create({
           data: {
             userId: followingId,
             type: NotificationType.FOLLOW,
@@ -58,12 +60,17 @@ export class SocialService {
             senderAvatar: follower.avatar || null,
             metaData: { targetType: 'USER' },
           },
-        }).catch(() => {});
+        }).catch(() => null);
 
-        await this.notificationsService.sendPushNotification(
+        if (notif) {
+          this.notificationsGateway.sendNotificationToUser(followingId, notif).catch(() => {});
+        }
+
+       await this.notificationsService.sendPushNotification(
           followingId,
           'New Follower',
           `${follower.username} started following you.`,
+          { type: 'FOLLOW', targetId: followerId },
         ).catch(() => {});
       }
 
