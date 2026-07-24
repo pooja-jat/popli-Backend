@@ -14,6 +14,10 @@ export class RechargeDto {
   @IsString()
   @IsNotEmpty()
   paymentReference: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  packageId?: string;
 }
 export class WithdrawDto {
   @ApiProperty()

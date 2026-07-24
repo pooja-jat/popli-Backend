@@ -13,7 +13,7 @@ import { getViewRate } from '../utils/rateConfig';
 export class ViewEarningsProcessor extends WorkerHost {
   private readonly logger = new Logger(ViewEarningsProcessor.name);
 
-constructor(
+  constructor(
     private readonly prisma: PrismaService,
     private readonly notificationsGateway: NotificationsGateway,
     private readonly notificationsService: NotificationsService,
@@ -21,10 +21,9 @@ constructor(
     super();
   }
 
- async process(job: Job<ViewEarningsJobData>): Promise<void> {
+  async process(job: Job<ViewEarningsJobData>): Promise<void> {
     const { validViewId, reelId, creatorId } = job.data;
 
-    // Idempotency guard: skip if this view was already credited (retry / race with cron)
     const existingValidView = await this.prisma.validView.findUnique({
       where: { id: validViewId },
       select: { isProcessed: true },
@@ -47,12 +46,10 @@ constructor(
       return;
     }
 
- const ratePer1000 = await getViewRate(this.prisma);
-const grossEarning = calcSingleViewEarning(ratePer1000);
+    const ratePer1000 = await getViewRate(this.prisma);
+    const grossEarning = calcSingleViewEarning(ratePer1000);
 
     const wasCredited = await this.prisma.$transaction(async (tx) => {
-      // Atomically claim this view: only proceed if it's still unprocessed.
-      // If 0 rows are updated, another worker/cron already claimed it — abort without crediting.
       const claim = await tx.validView.updateMany({
         where: { id: validViewId, isProcessed: false },
         data: { isProcessed: true },
@@ -95,21 +92,6 @@ const grossEarning = calcSingleViewEarning(ratePer1000);
       this.logger.warn(`View ${validViewId} was already claimed by another process — skipped duplicate credit.`);
       return;
     }
-
-  await this.prisma.notification.create({
-      data: {
-        userId: creatorId,
-        type: 'SYSTEM',
-        title: 'Earnings Updated!',
-        body: `You earned ₹${grossEarning.toFixed(4)} from a new valid view!`,
-      },
-    }).catch(() => {});
-
-    await this.notificationsService.sendPushNotification(
-      creatorId,
-      'Earnings Updated!',
-      `You earned ₹${grossEarning.toFixed(4)} from a new valid view!`,
-    ).catch(() => {});
 
     this.logger.log(`Processed view earning for creator ${creatorId}, reel ${reelId}`);
   }

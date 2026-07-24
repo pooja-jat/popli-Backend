@@ -219,15 +219,31 @@ constructor(
       throw new BadRequestException('Invalid authentication flow.');
     }
 
-    // Generate JWT
+   const ipFlag = await this.prisma.platformFeatureFlag.findUnique({ where: { key: 'IP_FINGERPRINTING_ENABLED' } });
+    if (ipFlag?.enabled && ip) {
+      const accountsOnIp = await this.prisma.session.groupBy({
+        by: ['userId'],
+        where: { ipAddress: ip, createdAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } },
+      });
+      if (accountsOnIp.length > 5) {
+        await this.prisma.auditLog.create({
+          data: {
+            actorId: user.id,
+            action: 'IP_CLUSTER_FLAGGED',
+            entityType: 'Session',
+            entityId: 'ip_cluster',
+            newValue: { ip, accountCount: accountsOnIp.length },
+          },
+        });
+      }
+    }
+
     const payload = { sub: user.id, role: user.role };
     const accessToken = this.jwtService.sign(payload);
     const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
 
-    // Hash refresh token
     const tokenHash = await bcrypt.hash(refreshToken, 10);
 
-    // Store session
     await this.prisma.session.create({
       data: {
         userId: user.id,
@@ -322,6 +338,24 @@ async googleLogin(dto: GoogleLoginDto, ip: string, userAgent: string) {
 
       await this.prisma.wallet.create({ data: { userId: user.id } });
       await this.prisma.userPreference.create({ data: { userId: user.id } });
+    }
+   const ipFlagG = await this.prisma.platformFeatureFlag.findUnique({ where: { key: 'IP_FINGERPRINTING_ENABLED' } });
+    if (ipFlagG?.enabled && ip) {
+      const accountsOnIp = await this.prisma.session.groupBy({
+        by: ['userId'],
+        where: { ipAddress: ip, createdAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } },
+      });
+      if (accountsOnIp.length > 5) {
+        await this.prisma.auditLog.create({
+          data: {
+            actorId: user.id,
+            action: 'IP_CLUSTER_FLAGGED',
+            entityType: 'Session',
+            entityId: 'ip_cluster',
+            newValue: { ip, accountCount: accountsOnIp.length },
+          },
+        });
+      }
     }
 
     const payload = { sub: user.id, role: user.role };
@@ -465,6 +499,25 @@ async googleLogin(dto: GoogleLoginDto, ip: string, userAgent: string) {
       }
     }
 
+    const ipFlagD = await this.prisma.platformFeatureFlag.findUnique({ where: { key: 'IP_FINGERPRINTING_ENABLED' } });
+    if (ipFlagD?.enabled && ip) {
+      const accountsOnIp = await this.prisma.session.groupBy({
+        by: ['userId'],
+        where: { ipAddress: ip, createdAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } },
+      });
+      if (accountsOnIp.length > 5) {
+        await this.prisma.auditLog.create({
+          data: {
+            actorId: user.id,
+            action: 'IP_CLUSTER_FLAGGED',
+            entityType: 'Session',
+            entityId: 'ip_cluster',
+            newValue: { ip, accountCount: accountsOnIp.length },
+          },
+        });
+      }
+    }
+
     const payload = { sub: user.id, role: user.role };
     const accessToken = this.jwtService.sign(payload);
     const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
@@ -493,6 +546,7 @@ async googleLogin(dto: GoogleLoginDto, ip: string, userAgent: string) {
       },
     };
   }
+
 
  async changePhone(userId: string, dto: { currentPhoneOtp?: string; newPhone: string; newPhoneOtp: string }) {
     if (dto.currentPhoneOtp !== '1234' || dto.newPhoneOtp !== '1234') {

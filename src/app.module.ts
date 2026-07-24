@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { SecurityModule } from './security/security.module';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { CacheModule } from '@nestjs/cache-manager';
@@ -18,6 +19,8 @@ import { GiftsModule } from './gifts/gifts.module';
 import { KycModule } from './kyc/kyc.module';
 import { SupportModule } from './support/support.module';
 import { AdminModule } from './admin/admin.module';
+import { ChatModerationModule } from './chat-moderation/chat-moderation.module';
+import { FeedModule } from './feed/feed.module';
 import { UploadModule } from './upload/upload.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { SearchModule } from './search/search.module';
@@ -25,6 +28,7 @@ import { InterestsModule } from './interests/interests.module';
 import { ChallengesModule } from './challenges/challenges.module';
 import { HashtagsModule } from './hashtags/hashtags.module';
 import { SystemModule } from './system/system.module';
+import { CoinPackagesModule } from './coin-packages/coin-packages.module';
 import { QueueModule } from './queue/queue.module';
 import { BullModule } from '@nestjs/bullmq';
 
@@ -46,7 +50,6 @@ BullModule.forRootAsync({
             host: redisUrl.hostname,
             port: Number(redisUrl.port) || 6379,
             password: redisUrl.password || undefined,
-            tls: { rejectUnauthorized: false },
           },
         };
       },
@@ -65,13 +68,17 @@ BullModule.forRootAsync({
     KycModule,
     SupportModule,
     AdminModule,
+   ChatModerationModule,
+    FeedModule,
     UploadModule,
     AnalyticsModule,
     SearchModule,
     InterestsModule,
     ChallengesModule,
     HashtagsModule,
-    SystemModule,
+  SystemModule,
+  CoinPackagesModule,
+    SecurityModule,
   ],
   controllers: [AppController],
   providers: [

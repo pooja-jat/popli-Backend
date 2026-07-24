@@ -15,6 +15,7 @@ import { HashtagsService } from '../hashtags/hashtags.service';
 import { extractHashtags } from '../utils/hashtags.util';
 import { ChallengesGateway } from '../challenges/challenges.gateway';
 import { checkAndProcessReferral } from '../utils/referral.util';
+import { getViewerRewardConfig, getLikerRewardConfig } from './reels-reward-config.util';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { VIEW_EARNINGS_QUEUE, ViewEarningsJobData } from '../queue/view-earnings.queue';
@@ -92,11 +93,15 @@ export class ReelsService {
       }
     }
 
+ const moderationFlag = await this.prisma.platformFeatureFlag.findUnique({ where: { key: 'AI_MODERATION_ENABLED' } });
+    const requiresReview = moderationFlag?.enabled ?? false;
+
     const reel = await this.prisma.reel.create({
       data: {
         ...restDto,
         layersData,
         creatorId,
+        ...(requiresReview && { challengeApprovalStatus: 'PENDING' }),
        ...(challengeId && { challengeId, challengeApprovalStatus: 'PENDING' }),
         ...(validTaggedUserIds.length > 0 && {
           taggedUsers: {
@@ -484,7 +489,8 @@ select: { reelId: true, credit: true },
           this.challengesGateway.broadcastLeaderboardUpdate(reel.challengeId);
         }
 
-        // Liker Rewards (1 coin per 2 likes, max 50 coins/day)
+// Liker Rewards — rate and cap from SystemConfig
+        const likerRewardConfig = await getLikerRewardConfig(this.prisma);
         const today = new Date();
         const startOfDay = new Date(
           today.getFullYear(),
@@ -511,14 +517,14 @@ select: { reelId: true, credit: true },
             where: { referenceId, walletId: likerWallet.id },
           });
 
-          const maxLikeRewards = 50;
+          const { coinRewardPer2Likes, maxDailyCoins: maxLikeRewards } = likerRewardConfig;
 
           if (!existingLikeTx) {
             await this.prisma.transaction.create({
               data: {
                 walletId: likerWallet.id,
                 type: 'CHALLENGE_REWARD',
-                amount: 1,
+                amount: coinRewardPer2Likes,
                 currency: 'COINS',
                 status: 'SUCCESS',
                 referenceId,
@@ -527,20 +533,19 @@ select: { reelId: true, credit: true },
             });
             await this.prisma.wallet.update({
               where: { id: likerWallet.id },
-              data: { coinBalance: { increment: 1 } },
+              data: { coinBalance: { increment: coinRewardPer2Likes } },
             });
           } else if (existingLikeTx.amount < maxLikeRewards) {
             await this.prisma.transaction.update({
               where: { id: existingLikeTx.id },
-              data: { amount: { increment: 1 } },
+              data: { amount: { increment: coinRewardPer2Likes } },
             });
             await this.prisma.wallet.update({
               where: { id: likerWallet.id },
-              data: { coinBalance: { increment: 1 } },
+              data: { coinBalance: { increment: coinRewardPer2Likes } },
             });
           }
         }
-
         const user = await this.prisma.user.findUnique({
           where: { id: userId },
         });
@@ -983,24 +988,38 @@ select: { reelId: true, credit: true },
     if (!existingValidView) {
         let validView;
         try {
-          validView = await this.prisma.validView.create({
-            data: {
-              reelId,
-              userId,
-              deviceId: metrics?.deviceId,
-            },
+          validView = await this.prisma.$transaction(async (tx) => {
+            const created = await tx.validView.create({
+              data: {
+                reelId,
+                userId,
+                deviceId: metrics?.deviceId,
+              },
+            });
+
+            await tx.outboxEvent.create({
+              data: {
+                type: 'VIEW_EARNING',
+                payload: {
+                  validViewId: created.id,
+                  reelId,
+                  creatorId: reel.creatorId,
+                  watchDuration: metrics?.watchDuration ?? 10000,
+                },
+              },
+            });
+
+            return created;
           });
         } catch (error: any) {
           if (error.code === 'P2002') {
-            // Same deviceId already has a ValidView for this reel under a different
-            // account — treat as already-counted instead of crashing the request.
             this.logger.warn(`ValidView device conflict for reel ${reelId}, device ${metrics?.deviceId}`);
             return { success: true, isValidForEarning: false, reason: 'duplicate_device' };
           }
           throw error;
         }
 
-      isValidForEarning = true;
+        isValidForEarning = true;
 
         this.viewEarningsQueue.add(
           'process-view',
@@ -1020,7 +1039,10 @@ select: { reelId: true, credit: true },
           this.logger.warn(`Failed to enqueue view job for reel ${reelId}: ${err.message}`);
         });
 
-        // Award Coins to Viewer for watching (10 coins per view, capped at 200/day)
+   // Award Coins to Viewer — rate and cap from SystemConfig
+        const viewerRewardConfig = await getViewerRewardConfig(this.prisma);
+        const { coinRewardPerView: viewReward, maxDailyCoins: maxDailyViews } = viewerRewardConfig;
+
         let viewerWallet = await this.prisma.wallet.findUnique({
           where: { userId },
         });
@@ -1037,9 +1059,6 @@ select: { reelId: true, credit: true },
         const existingTx = await this.prisma.transaction.findFirst({
           where: { referenceId, walletId: viewerWallet.id },
         });
-
-        const viewReward = 10;
-        const maxDailyViews = 200;
 
         if (!existingTx) {
           await this.prisma.transaction.create({
@@ -1067,7 +1086,6 @@ select: { reelId: true, credit: true },
             data: { coinBalance: { increment: viewReward } },
           });
         }
-
         // Also record WatchHistory
         await this.prisma.watchHistory.upsert({
           where: { userId_reelId: { userId, reelId } },

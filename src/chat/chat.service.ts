@@ -7,13 +7,15 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { SendMessageDto } from './dto/chat.dto';
 import { ChatGateway } from './chat.gateway';
+import { ChatModerationService } from '../chat-moderation/chat-moderation.service';
 
 @Injectable()
 export class ChatService {
-  constructor(
+ constructor(
     private prisma: PrismaService,
     @Inject(forwardRef(() => ChatGateway))
     private chatGateway: ChatGateway,
+    private chatModerationService: ChatModerationService,
   ) {}
 
   async getChats(userId: string) {
@@ -120,6 +122,10 @@ export class ChatService {
       where: { chatId, userId: { not: senderId } },
       data: { unreadCount: { increment: 1 } },
     });
+
+ if (message.text) {
+      this.chatModerationService.scanAndFlagMessage(message.id).catch(() => null);
+    }
 
     if (this.chatGateway) {
       this.chatGateway.broadcastMessage(chatId, message);

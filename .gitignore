@@ -1,17 +1,54 @@
+# Dependencies
 node_modules/
+
+# Build output
 dist/
+coverage/
+
+# Environment
 .env
-.DS_Store
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Firebase / Service Account Keys
 firebase-admin-key.json
 firebase-admin-key.json.json
-npm-debug.log
-yarn-error.log
-.idea/
-.vscode/
-cloudflared.exe
-tunnel.log
-firebaseAdminKey.json
-firebaseAdminKey.json
 firebaseAdminKey.json
 serviceAccountKey.json
 /serviceAccountKey.json
+*.firebase.json
+*.serviceAccount*.json
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Cloudflare
+cloudflared.exe
+tunnel.log
+
+# Prisma
+prisma/dev.db
+prisma/dev.db-journal
+
+# Temporary files
+tmp/
+temp/
+.cache/
+
+# Runtime
+pids/
+*.pid
+*.seed
+*.pid.lock

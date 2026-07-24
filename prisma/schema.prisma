@@ -30,6 +30,9 @@ model User {
   dob                         DateTime?
   gender                      String?
   isBlocked                   Boolean                      @default(false)
+  isShadowBanned              Boolean                      @default(false)
+  earningsFrozen              Boolean                      @default(false)
+  isMonetized                 Boolean                      @default(true)
   isProfileComplete           Boolean                      @default(false)
   totalLikesReceived          Int                          @default(0)
   deviceId                    String?
@@ -165,9 +168,13 @@ model Reel {
   createdAt               DateTime           @default(now())
   updatedAt               DateTime           @updatedAt
   layersData              Json?
-  pendingEarningsViews    Int                @default(0)
+ pendingEarningsViews    Int                @default(0)
   privacy                 String             @default("Public")
   isMonetized             Boolean            @default(true)
+  isTrending              Boolean            @default(false)
+  copyrightFlag           Boolean            @default(false)
+  ageRestricted           Boolean            @default(false)
+  durationSeconds         Int                @default(0)
   challengeId             String?
    challengeApprovalStatus ReelApprovalStatus @default(PENDING)
   allowComments           Boolean            @default(true)
@@ -344,6 +351,7 @@ model Chat {
   updatedAt     DateTime          @updatedAt
   participants  ChatParticipant[]
   messages      Message[]
+  moderationFlags ChatModerationFlag[]
 }
 
 model ChatParticipant {
@@ -419,8 +427,26 @@ model Gift {
   animationType String   @default("fly")
   createdAt     DateTime @default(now())
   costInINR     Float    @default(0.0)
+  isActive      Boolean  @default(true)
+  sortOrder     Int      @default(0)
 }
 
+model CoinPackage {
+  id          String   @id @default(uuid())
+  title       String
+  coins       Int
+  bonusCoins  Int      @default(0)
+  priceInr    Int
+  badge       String?
+  badgeColor  String?
+  description String?
+  isPopular   Boolean  @default(false)
+  isRecommended Boolean @default(false)
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
 model Notification {
   id           String           @id @default(uuid())
   userId       String
@@ -685,6 +711,19 @@ model EarningSnapshot {
   @@unique([userId, date])
 }
 
+model OutboxEvent {
+  id          String   @id @default(uuid())
+  type        String
+  payload     Json
+  status      String   @default("PENDING")
+  attempts    Int      @default(0)
+  lastError   String?
+  processedAt DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([status, createdAt])
+}
+
 model AuditLog {
   id         String   @id @default(uuid())
   actorId    String
@@ -706,6 +745,52 @@ model SystemConfig {
   description String?
   updatedAt   DateTime @updatedAt
   updatedBy   String?
+}
+
+model Campaign {
+  id             String   @id @default(uuid())
+  title          String
+  type           String
+  status         String   @default("active")
+  targetAudience String?
+  targetCity     String?
+  hashtag        String?
+  createdBy      String
+  scheduledTime  DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model FeedBoost {
+  id        String          @id @default(uuid())
+  type      String
+  target    String
+  intensity Int             @default(50)
+  isActive  Boolean         @default(true)
+  status    FeedBoostStatus @default(ACTIVE)
+  startDate DateTime?
+  endDate   DateTime?
+  priority  Int             @default(0)
+  notes     String?
+  createdBy String
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+}
+
+model FeedConfigVersion {
+  id        String   @id @default(uuid())
+  version   Int
+  weights   Json
+  notes     String?
+  changedBy String
+  createdAt DateTime @default(now())
+}
+
+enum FeedBoostStatus {
+  ACTIVE
+  PAUSED
+  EXPIRED
+  SCHEDULED
 }
 
 model ReferralTracker {
@@ -870,4 +955,144 @@ enum ReferralStatus {
   PENDING
   COMPLETED
   REJECTED
+}
+
+model AdminPartner {
+  id          String            @id @default(uuid())
+  fullName    String
+  username    String            @unique
+  email       String            @unique
+  passwordHash String
+  phone       String?
+  designation String
+  department  String?
+  status      AdminPartnerStatus @default(ACTIVE)
+  permissions Json              @default("{}")
+  lastLoginAt DateTime?
+  createdBy   String
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+}
+
+enum AdminPartnerStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+model PlatformFeatureFlag {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  enabled     Boolean  @default(false)
+  description String?
+  updatedBy   String?
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+}
+
+model BotProtectionState {
+  id          String    @id @default(uuid())
+  enabled     Boolean   @default(false)
+  enabledBy   String?
+  enabledAt   DateTime?
+  disabledBy  String?
+  disabledAt  DateTime?
+  reason      String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model SecurityEvent {
+  id          String   @id @default(uuid())
+  eventType   String
+  severity    String   @default("HIGH")
+  performedBy String
+  performedByName String
+  description String?
+  ipAddress   String?
+  userAgent   String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+}
+
+model ChatModerationFlag {
+  id                String                  @id @default(uuid())
+  chatId            String
+  messageId         String?
+  reporterId        String?
+  flagType          ChatFlagType
+  reason            String
+  severity          ChatFlagSeverity        @default(LOW)
+  status            ChatFlagStatus          @default(OPEN)
+  confidenceScore   Float                   @default(0.0)
+  detectedKeywords  String[]                @default([])
+  detectedLinks     String[]                @default([])
+  aiExplanation     String?
+  createdAt         DateTime                @default(now())
+  reviewedAt        DateTime?
+  reviewedBy        String?
+  chat              Chat                    @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  actions           ChatModerationAction[]
+
+  @@index([chatId])
+  @@index([status])
+  @@index([severity])
+  @@index([createdAt])
+}
+
+model ChatModerationAction {
+  id         String              @id @default(uuid())
+  flagId     String
+  adminId    String
+  action     ChatActionType
+  reason     String?
+  targetUserId String?
+  previousState Json?
+  newState    Json?
+  createdAt  DateTime            @default(now())
+  flag       ChatModerationFlag  @relation(fields: [flagId], references: [id], onDelete: Cascade)
+
+  @@index([flagId])
+  @@index([adminId])
+}
+
+enum ChatFlagType {
+  SPAM
+  SCAM_LINK
+  PHISHING
+  ABUSE
+  THREAT
+  HATE_SPEECH
+  SEXUAL_SOLICITATION
+  MINOR_SAFETY
+  CRYPTO_SCAM
+  EXTERNAL_PAYMENT
+  HARASSMENT
+  IMPERSONATION
+  NSFW
+  OTHER
+}
+
+enum ChatFlagSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum ChatFlagStatus {
+  OPEN
+  INVESTIGATING
+  RESOLVED
+  DISMISSED
+  ESCALATED
+}
+
+enum ChatActionType {
+  WARN_USER
+  BAN_USER
+  TEMP_BAN
+  MUTE_USER
+  DISMISS_FLAG
+  ESCALATE
+  RESOLVE
 }

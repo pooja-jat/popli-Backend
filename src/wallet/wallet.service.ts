@@ -112,7 +112,7 @@ constructor(
               },
             });
 
-            await tx.walletLedger.create({
+        await tx.walletLedger.create({
               data: {
                 userId: creatorId,
                 walletId: wallet.id,
@@ -120,7 +120,7 @@ constructor(
                 sourceId: batch.id,
                 reelId: reelId,
                 credit: grossEarnings,
-                balanceAfter: wallet.withdrawableBalance,
+                balanceAfter: wallet.withdrawableBalance + grossEarnings,
                 description: `Reel earnings for ${claim.count} views. Gross: ₹${grossEarnings.toFixed(2)} (TDS & platform fee deducted at withdrawal)`,
               },
             });
@@ -426,12 +426,22 @@ async rechargeCoins(userId: string, dto: RechargeDto) {
       const wallet = await tx.wallet.findUnique({ where: { userId } });
       if (!wallet) throw new BadRequestException('Wallet not found');
 
+      let coinsToCredit = dto.coins;
+      let amountPaid = dto.amount;
+
+      if (dto.packageId) {
+        const pkg = await tx.coinPackage.findUnique({ where: { id: dto.packageId } });
+        if (!pkg || !pkg.isActive) throw new BadRequestException('Invalid or unavailable coin package');
+        coinsToCredit = pkg.coins + pkg.bonusCoins;
+        amountPaid = pkg.priceInr;
+      }
+
       await tx.transaction.create({
         data: {
           walletId: wallet.id,
           type: 'COIN_RECHARGE',
-          amount: dto.amount,
-          coinsCredited: dto.coins,
+          amount: amountPaid,
+          coinsCredited: coinsToCredit,
           currency: 'INR',
           status: 'SUCCESS',
           referenceId: dto.paymentReference,
@@ -440,11 +450,10 @@ async rechargeCoins(userId: string, dto: RechargeDto) {
 
       return tx.wallet.update({
         where: { id: wallet.id },
-        data: { coinBalance: { increment: dto.coins } },
+        data: { coinBalance: { increment: coinsToCredit } },
       });
     });
   }
-
   async promotePendingToWithdrawable() {
     this.logger.log(
       'Starting promotion of pending balances to withdrawable...',
