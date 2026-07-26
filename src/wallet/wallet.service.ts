@@ -1,4 +1,7 @@
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
+import { VerifyPaymentDto } from './dto/wallet.dto';
+import * as crypto from 'crypto';
+import Razorpay from 'razorpay';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { RechargeDto, WithdrawDto } from './dto/wallet.dto';
@@ -313,14 +316,25 @@ private async checkReferralUnlockEligibility(
       this.prisma.systemConfig.findUnique({ where: { key: 'PLATFORM_FEE_PERCENTAGE' } }),
     ]);
 
-    const minWithdrawal =
-      minWithdrawConfig && typeof minWithdrawConfig.valueJson === 'number'
-        ? minWithdrawConfig.valueJson
-        : 500;
-    const tdsPercent =
-      tdsConfig && typeof tdsConfig.valueJson === 'number' ? tdsConfig.valueJson : 10;
-    const feePercent =
-      feeConfig && typeof feeConfig.valueJson === 'number' ? feeConfig.valueJson : 2;
+   if (!minWithdrawConfig || typeof minWithdrawConfig.valueJson !== 'number') {
+      throw new BadRequestException(
+        'Platform configuration MIN_WITHDRAWAL_INR is not set. Contact support.',
+      );
+    }
+    if (!tdsConfig || typeof tdsConfig.valueJson !== 'number') {
+      throw new BadRequestException(
+        'Platform configuration TDS_PERCENTAGE is not set. Contact support.',
+      );
+    }
+    if (!feeConfig || typeof feeConfig.valueJson !== 'number') {
+      throw new BadRequestException(
+        'Platform configuration PLATFORM_FEE_PERCENTAGE is not set. Contact support.',
+      );
+    }
+
+    const minWithdrawal = minWithdrawConfig.valueJson;
+    const tdsPercent = tdsConfig.valueJson;
+    const feePercent = feeConfig.valueJson;
 
     if (dto.amount < minWithdrawal) {
       throw new BadRequestException(`Minimum withdrawal amount is ₹${minWithdrawal}`);
@@ -421,7 +435,289 @@ private async checkReferralUnlockEligibility(
     });
   }
 
-async rechargeCoins(userId: string, dto: RechargeDto) {
+async createRazorpayOrder(userId: string, packageId: string) {
+    const pkg = await this.prisma.coinPackage.findUnique({ where: { id: packageId } });
+    if (!pkg || !pkg.isActive) throw new BadRequestException('Invalid or unavailable coin package');
+
+    const razorpay = new Razorpay({
+      key_id: process.env.RAZORPAY_KEY_ID!,
+      key_secret: process.env.RAZORPAY_KEY_SECRET!,
+    });
+
+    const amountInPaise = pkg.priceInr * 100;
+    const receiptId = `rcpt_${userId.slice(0, 8)}_${Date.now()}`;
+
+    let order: any;
+    try {
+      order = await razorpay.orders.create({
+        amount: amountInPaise,
+        currency: 'INR',
+        receipt: receiptId,
+        notes: { userId, packageId },
+      });
+    } catch (e: any) {
+      this.logger.error('Razorpay order creation failed', e?.message);
+      throw new BadRequestException('Payment gateway error. Please try again.');
+    }
+
+    const coinsToCredit = pkg.coins + pkg.bonusCoins;
+
+    await this.prisma.paymentRecord.create({
+      data: {
+        userId,
+        packageId,
+        razorpayOrderId: order.id,
+        amount: pkg.priceInr,
+        coinsToCredit,
+        status: 'PENDING',
+      },
+    });
+
+    this.logger.log(`Order created: ${order.id} | user: ${userId} | package: ${packageId}`);
+
+    return {
+      orderId: order.id,
+      amount: amountInPaise,
+      currency: 'INR',
+      keyId: process.env.RAZORPAY_KEY_ID,
+      packageTitle: pkg.title,
+      coins: coinsToCredit,
+    };
+  }
+
+  async verifyAndCreditCoins(userId: string, dto: VerifyPaymentDto) {
+    const expectedSignature = crypto
+      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET!)
+      .update(`${dto.razorpayOrderId}|${dto.razorpayPaymentId}`)
+      .digest('hex');
+
+    if (expectedSignature !== dto.razorpaySignature) {
+      this.logger.warn(`Invalid signature | order: ${dto.razorpayOrderId} | user: ${userId}`);
+      throw new BadRequestException('Payment verification failed. Invalid signature.');
+    }
+
+    const paymentRecord = await this.prisma.paymentRecord.findUnique({
+      where: { razorpayOrderId: dto.razorpayOrderId },
+    });
+
+    if (!paymentRecord) throw new BadRequestException('Payment record not found.');
+    if (paymentRecord.userId !== userId) throw new BadRequestException('Unauthorized payment.');
+
+    if (paymentRecord.status === 'SUCCESS') {
+      this.logger.warn(`Duplicate verify attempt | order: ${dto.razorpayOrderId} | user: ${userId}`);
+      const wallet = await this.prisma.wallet.findUnique({ where: { userId } });
+      return { success: true, coinBalance: wallet?.coinBalance ?? 0, coinsAdded: 0, duplicate: true };
+    }
+
+    if (paymentRecord.status === 'FAILED' || paymentRecord.status === 'CANCELLED') {
+      throw new BadRequestException('This payment was already marked as failed or cancelled.');
+    }
+
+    const pkg = await this.prisma.coinPackage.findUnique({ where: { id: paymentRecord.packageId } });
+    if (!pkg || !pkg.isActive) throw new BadRequestException('Coin package no longer available.');
+
+    const expectedCoins = pkg.coins + pkg.bonusCoins;
+    if (paymentRecord.coinsToCredit !== expectedCoins || paymentRecord.amount !== pkg.priceInr) {
+      this.logger.error(`Mismatch | order: ${dto.razorpayOrderId} | stored: ${paymentRecord.amount}/${paymentRecord.coinsToCredit} | pkg: ${pkg.priceInr}/${expectedCoins}`);
+      throw new BadRequestException('Payment amount mismatch. Contact support.');
+    }
+
+    const razorpay = new Razorpay({
+      key_id: process.env.RAZORPAY_KEY_ID!,
+      key_secret: process.env.RAZORPAY_KEY_SECRET!,
+    });
+
+    let gatewayPayment: any;
+    try {
+      gatewayPayment = await razorpay.payments.fetch(dto.razorpayPaymentId);
+    } catch (e: any) {
+      this.logger.error(`Gateway fetch failed | payment: ${dto.razorpayPaymentId}`, e?.message);
+      throw new BadRequestException('Could not verify payment with gateway.');
+    }
+
+    if (gatewayPayment.status !== 'captured' && gatewayPayment.status !== 'authorized') {
+      await this.prisma.paymentRecord.update({
+        where: { razorpayOrderId: dto.razorpayOrderId },
+        data: { status: 'FAILED', razorpayPaymentId: dto.razorpayPaymentId },
+      });
+      throw new BadRequestException('Payment was not successful.');
+    }
+
+    if (gatewayPayment.amount !== paymentRecord.amount * 100) {
+      this.logger.error(`Amount mismatch | expected: ${paymentRecord.amount * 100} | got: ${gatewayPayment.amount}`);
+      throw new BadRequestException('Payment amount mismatch with gateway.');
+    }
+
+    const updatedWallet = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const fresh = await tx.paymentRecord.findUnique({
+        where: { razorpayOrderId: dto.razorpayOrderId },
+        select: { status: true },
+      });
+      if (fresh?.status === 'SUCCESS') {
+        return tx.wallet.findUnique({ where: { userId } });
+      }
+
+      await tx.paymentRecord.update({
+        where: { razorpayOrderId: dto.razorpayOrderId },
+        data: {
+          status: 'SUCCESS',
+          razorpayPaymentId: dto.razorpayPaymentId,
+          paymentMethod: gatewayPayment.method ?? null,
+          verifiedAt: new Date(),
+        },
+      });
+
+      const wallet = await tx.wallet.upsert({
+        where: { userId },
+        create: { userId, coinBalance: paymentRecord.coinsToCredit },
+        update: { coinBalance: { increment: paymentRecord.coinsToCredit } },
+      });
+
+      await tx.transaction.create({
+        data: {
+          walletId: wallet.id,
+          type: 'COIN_RECHARGE',
+          amount: paymentRecord.amount,
+          coinsCredited: paymentRecord.coinsToCredit,
+          currency: 'INR',
+          status: 'SUCCESS',
+          referenceId: dto.razorpayPaymentId,
+          description: `Coin Recharge • ${paymentRecord.coinsToCredit} coins via Razorpay`,
+        },
+      });
+
+      const openingCoins = wallet.coinBalance - paymentRecord.coinsToCredit;
+      await tx.walletLedger.create({
+        data: {
+          userId,
+          walletId: wallet.id,
+          source: 'COIN_PURCHASE',
+          sourceId: dto.razorpayPaymentId,
+          credit: paymentRecord.amount,
+          balanceAfter: wallet.withdrawableBalance,
+          description: `${paymentRecord.coinsToCredit} coins credited. Opening: ${openingCoins}, Closing: ${wallet.coinBalance}. Ref: ${dto.razorpayPaymentId}`,
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          actorId: userId,
+          action: 'COIN_RECHARGE_SUCCESS',
+          entityType: 'PaymentRecord',
+          entityId: dto.razorpayOrderId,
+          newValue: {
+            paymentId: dto.razorpayPaymentId,
+            amount: paymentRecord.amount,
+            coinsCredit: paymentRecord.coinsToCredit,
+            packageId: paymentRecord.packageId,
+          },
+        },
+      });
+
+      return wallet;
+    });
+
+    this.logger.log(`Coins credited | ${paymentRecord.coinsToCredit} coins | user: ${userId} | payment: ${dto.razorpayPaymentId}`);
+
+    this.notificationsService.createAndPush(
+      {
+        userId,
+        type: 'SYSTEM',
+        title: 'Coins Recharged!',
+        body: `${paymentRecord.coinsToCredit} Pop Coins added to your wallet.`,
+      },
+      'Coins Recharged!',
+      `${paymentRecord.coinsToCredit} Pop Coins added to your wallet.`,
+    ).catch(() => {});
+
+    return {
+      success: true,
+      coinBalance: updatedWallet?.coinBalance ?? 0,
+      coinsAdded: paymentRecord.coinsToCredit,
+      duplicate: false,
+    };
+  }
+
+  async handleRazorpayWebhook(rawBody: Buffer, signature: string) {
+    const expectedSignature = crypto
+      .createHmac('sha256', process.env.RAZORPAY_WEBHOOK_SECRET!)
+      .update(rawBody)
+      .digest('hex');
+
+    if (expectedSignature !== signature) {
+      this.logger.warn('Invalid webhook signature');
+      throw new BadRequestException('Invalid webhook signature');
+    }
+
+    let event: any;
+    try {
+      event = JSON.parse(rawBody.toString());
+    } catch {
+      throw new BadRequestException('Invalid webhook payload');
+    }
+
+    this.logger.log(`Webhook received: ${event.event}`);
+
+    if (event.event === 'payment.captured') {
+      const payment = event.payload?.payment?.entity;
+      if (!payment?.order_id) return { received: true };
+
+      const record = await this.prisma.paymentRecord.findUnique({
+        where: { razorpayOrderId: payment.order_id },
+      });
+
+      if (!record || record.status === 'SUCCESS') return { received: true };
+
+      const signature = crypto
+        .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET!)
+        .update(`${payment.order_id}|${payment.id}`)
+        .digest('hex');
+
+      await this.verifyAndCreditCoins(record.userId, {
+        razorpayOrderId: payment.order_id,
+        razorpayPaymentId: payment.id,
+        razorpaySignature: signature,
+      }).catch((e: any) => {
+        this.logger.error(`Webhook coin credit failed | order: ${payment.order_id} | ${e?.message}`);
+      });
+    }
+
+    if (event.event === 'payment.failed') {
+      const payment = event.payload?.payment?.entity;
+      if (!payment?.order_id) return { received: true };
+
+      await this.prisma.paymentRecord.updateMany({
+        where: { razorpayOrderId: payment.order_id, status: 'PENDING' },
+        data: { status: 'FAILED', razorpayPaymentId: payment.id },
+      });
+
+      this.logger.log(`Webhook payment.failed | order: ${payment.order_id}`);
+    }
+
+    if (event.event === 'refund.processed') {
+      const refund = event.payload?.refund?.entity;
+      if (!refund?.payment_id) return { received: true };
+
+      await this.prisma.paymentRecord.updateMany({
+        where: { razorpayPaymentId: refund.payment_id },
+        data: { status: 'REFUNDED' },
+      });
+
+      this.logger.log(`Webhook refund.processed | payment: ${refund.payment_id}`);
+    }
+
+    return { received: true };
+  }
+
+  async getPaymentHistory(userId: string) {
+    return this.prisma.paymentRecord.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      take: 30,
+    });
+  }
+
+  async rechargeCoins(userId: string, dto: RechargeDto) {
     return this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const wallet = await tx.wallet.findUnique({ where: { userId } });
       if (!wallet) throw new BadRequestException('Wallet not found');

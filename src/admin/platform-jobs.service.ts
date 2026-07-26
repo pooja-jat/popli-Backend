@@ -107,15 +107,15 @@ export class PlatformJobsService {
 
     for (const challenge of activeChallenges) {
       for (const creator of creators) {
-        await this.prisma.notification.upsert({
+await this.prisma.notification.upsert({
           where: {
             userId_senderId_type_commentId_postId_replyId: {
               userId: creator.id,
-              senderId: null,
+              senderId: null as any,
               type: 'CHALLENGE_INVITE',
-              commentId: null,
+              commentId: null as any,
               postId: challenge.id,
-              replyId: null,
+              replyId: null as any,
             },
           },
           update: { isRead: false, updatedAt: new Date() },

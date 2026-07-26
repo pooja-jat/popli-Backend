@@ -1246,7 +1246,7 @@ select: { reelId: true, credit: true },
     });
   }
 
-  async deleteReel(reelId: string, userId: string) {
+async deleteReel(reelId: string, userId: string) {
     const reel = await this.prisma.reel.findUnique({ where: { id: reelId } });
     if (!reel) {
       return { success: true, message: 'Reel already deleted' };
@@ -1255,8 +1255,13 @@ select: { reelId: true, credit: true },
       throw new UnauthorizedException('You can only delete your own reels');
     }
 
-    // Remove hashtags and decrement counts
     await this.hashtagsService.removeHashtagsForReel(reelId);
+
+    if (reel.muxAssetId) {
+      const { VideoService } = await import('../video/video.service');
+      const videoService = new VideoService(this.prisma);
+      await videoService.deleteAsset(reel.muxAssetId);
+    }
 
     return this.prisma.reel.delete({
       where: { id: reelId },

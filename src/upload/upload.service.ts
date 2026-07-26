@@ -1,30 +1,71 @@
-import { Injectable } from '@nestjs/common';
-import { v2 as cloudinary } from 'cloudinary';
+import { Injectable, BadRequestException } from '@nestjs/common';
+import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { randomUUID } from 'crypto';
 
 @Injectable()
 export class UploadService {
+  private s3: S3Client;
+  private bucket: string;
+  private publicUrl: string;
+
   constructor() {
-    cloudinary.config({
-      cloud_name: process.env.CLOUDINARY_CLOUD_NAME || 'dekt0pjij',
-      api_key: process.env.CLOUDINARY_API_KEY || '277917496774264',
-      api_secret:
-        process.env.CLOUDINARY_API_SECRET || 'ekp_Umr7qld9fLwDdKqku033mb0',
+    this.bucket = process.env.R2_BUCKET_NAME!;
+    this.publicUrl = process.env.R2_PUBLIC_URL!;
+
+    this.s3 = new S3Client({
+      region: 'auto',
+      endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+      credentials: {
+        accessKeyId: process.env.R2_ACCESS_KEY_ID!,
+        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
+      },
     });
   }
 
-  getSignedUrl(folder: string) {
-    const timestamp = Math.round(new Date().getTime() / 1000);
-    const signature = cloudinary.utils.api_sign_request(
-      { timestamp, folder },
-      process.env.CLOUDINARY_API_SECRET || 'ekp_Umr7qld9fLwDdKqku033mb0',
-    );
+  private validateImageMime(contentType: string) {
+    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/jpg'];
+    if (!allowed.includes(contentType)) {
+      throw new BadRequestException(`Unsupported image type: ${contentType}. Allowed: ${allowed.join(', ')}`);
+    }
+  }
+
+  private buildObjectKey(folder: string, filename: string): string {
+    return `${folder}/${randomUUID()}-${filename}`;
+  }
+
+  async getPresignedUploadUrl(folder: string, filename: string, contentType: string): Promise<{
+    uploadUrl: string;
+    objectKey: string;
+    publicUrl: string;
+  }> {
+    this.validateImageMime(contentType);
+
+    const objectKey = this.buildObjectKey(folder, filename);
+
+    const command = new PutObjectCommand({
+      Bucket: this.bucket,
+      Key: objectKey,
+      ContentType: contentType,
+    });
+
+    const uploadUrl = await getSignedUrl(this.s3, command, { expiresIn: 300 });
 
     return {
-      timestamp,
-      signature,
-      cloudName: process.env.CLOUDINARY_CLOUD_NAME || 'dekt0pjij',
-      apiKey: process.env.CLOUDINARY_API_KEY || '277917496774264',
-      folder,
+      uploadUrl,
+      objectKey,
+      publicUrl: `${this.publicUrl}/${objectKey}`,
     };
+  }
+
+  async deleteObject(objectKey: string): Promise<void> {
+    try {
+      await this.s3.send(new DeleteObjectCommand({
+        Bucket: this.bucket,
+        Key: objectKey,
+      }));
+    } catch (error) {
+      console.warn(`Failed to delete R2 object: ${objectKey}`, error);
+    }
   }
 }

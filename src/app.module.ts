@@ -22,6 +22,7 @@ import { AdminModule } from './admin/admin.module';
 import { ChatModerationModule } from './chat-moderation/chat-moderation.module';
 import { FeedModule } from './feed/feed.module';
 import { UploadModule } from './upload/upload.module';
+import { VideoModule } from './video/video.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { SearchModule } from './search/search.module';
 import { InterestsModule } from './interests/interests.module';
@@ -70,7 +71,8 @@ BullModule.forRootAsync({
     AdminModule,
    ChatModerationModule,
     FeedModule,
-    UploadModule,
+   UploadModule,
+    VideoModule,
     AnalyticsModule,
     SearchModule,
     InterestsModule,

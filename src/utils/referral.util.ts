@@ -9,15 +9,21 @@ async function getReferralRewards(prisma: any): Promise<{
     prisma.systemConfig.findUnique({ where: { key: 'REFERRAL_STANDARD_REWARD' } }),
   ]);
 
+if (!referrerConfig || typeof referrerConfig.valueJson !== 'number') {
+    throw new Error(
+      'Platform configuration REFERRAL_CREATOR_REWARD is not set. Run the database seed or set it via the Admin Panel.',
+    );
+  }
+
+  if (!referredConfig || typeof referredConfig.valueJson !== 'number') {
+    throw new Error(
+      'Platform configuration REFERRAL_STANDARD_REWARD is not set. Run the database seed or set it via the Admin Panel.',
+    );
+  }
+
   return {
-    referrerReward:
-      referrerConfig && typeof referrerConfig.valueJson === 'number'
-        ? referrerConfig.valueJson
-        : 100,
-    referredReward:
-      referredConfig && typeof referredConfig.valueJson === 'number'
-        ? referredConfig.valueJson
-        : 25,
+    referrerReward: referrerConfig.valueJson,
+    referredReward: referredConfig.valueJson,
   };
 }
 

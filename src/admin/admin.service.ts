@@ -1106,10 +1106,10 @@ async getFraudStats(adminId: string) {
     if (!admin || admin.role !== 'ADMIN')
       throw new UnauthorizedException('Not authorized');
 
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+  const user = await this.prisma.user.findUnique({ where: { id: userId } });
     return this.prisma.user.update({
       where: { id: userId },
-      data: { earningsFrozen: !user.earningsFrozen },
+      data: { earningsFrozen: !user?.earningsFrozen },
     });
   }
 
@@ -1118,10 +1118,10 @@ async getFraudStats(adminId: string) {
     if (!admin || admin.role !== 'ADMIN')
       throw new UnauthorizedException('Not authorized');
 
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+const user = await this.prisma.user.findUnique({ where: { id: userId } });
     return this.prisma.user.update({
       where: { id: userId },
-      data: { isMonetized: !user.isMonetized },
+      data: { isMonetized: !user?.isMonetized },
     });
   }
 
@@ -1130,10 +1130,10 @@ async getFraudStats(adminId: string) {
     if (!admin || admin.role !== 'ADMIN')
       throw new UnauthorizedException('Not authorized');
 
-    const reel = await this.prisma.reel.findUnique({ where: { id: reelId } });
+  const reel = await this.prisma.reel.findUnique({ where: { id: reelId } });
     return this.prisma.reel.update({
       where: { id: reelId },
-      data: { privacy: reel.privacy === 'Private' ? 'Public' : 'Private' },
+      data: { privacy: reel?.privacy === 'Private' ? 'Public' : 'Private' },
     });
   }
 
@@ -1142,10 +1142,10 @@ async getFraudStats(adminId: string) {
     if (!admin || admin.role !== 'ADMIN')
       throw new UnauthorizedException('Not authorized');
 
-    const reel = await this.prisma.reel.findUnique({ where: { id: reelId } });
+const reel = await this.prisma.reel.findUnique({ where: { id: reelId } });
     return this.prisma.reel.update({
       where: { id: reelId },
-      data: { isTrending: !reel.isTrending },
+      data: { isTrending: !reel?.isTrending },
     });
   }
 
@@ -1154,10 +1154,10 @@ async getFraudStats(adminId: string) {
     if (!admin || admin.role !== 'ADMIN')
       throw new UnauthorizedException('Not authorized');
 
-    const reel = await this.prisma.reel.findUnique({ where: { id: reelId } });
+ const reel = await this.prisma.reel.findUnique({ where: { id: reelId } });
     return this.prisma.reel.update({
       where: { id: reelId },
-      data: { ageRestricted: !reel.ageRestricted },
+      data: { ageRestricted: !reel?.ageRestricted },
     });
   }
 
@@ -1166,10 +1166,10 @@ async getFraudStats(adminId: string) {
     if (!admin || admin.role !== 'ADMIN')
       throw new UnauthorizedException('Not authorized');
 
-    const reel = await this.prisma.reel.findUnique({ where: { id: reelId } });
+const reel = await this.prisma.reel.findUnique({ where: { id: reelId } });
     return this.prisma.reel.update({
       where: { id: reelId },
-      data: { allowComments: !reel.allowComments },
+      data: { allowComments: !reel?.allowComments },
     });
   }
 

@@ -20,7 +20,8 @@ async function bootstrap() {
 
   const app = await NestFactory.create(AppModule);
 
-  app.use(helmet());
+app.use(helmet());
+  app.use('/wallet/recharge/webhook', require('express').raw({ type: 'application/json' }));
   app.enableCors();
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   app.useGlobalFilters(new HttpExceptionFilter());

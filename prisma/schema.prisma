@@ -116,26 +116,32 @@ model UserPreference {
 }
 
 model KYCRecord {
-  id               String    @id @default(uuid())
-  userId           String    @unique
-  fullName         String
-  dob              String
-  address          String?
-  panNumber        String?
-  aadharNumber     String?
-  upiId            String?
-  bankAccount      String?
-  ifscCode         String?
-  accountType      String    @default("Savings")
-  status           KycStatus @default(PENDING)
-  isPanVerified    Boolean   @default(false)
-  isAadharVerified Boolean   @default(false)
-  isUpiLinked      Boolean   @default(false)
-  isBankLinked     Boolean   @default(false)
-  submittedAt      DateTime  @default(now())
-  reviewedAt       DateTime?
-  rejectionReason  String?
-  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                    String    @id @default(uuid())
+  userId                String    @unique
+  fullName              String
+  dob                   String
+  address               String?
+  panNumber             String?
+  panNameFromProvider   String?
+  aadharNumber          String?
+  aadharRefId           String?
+  upiId                 String?
+  bankAccount           String?
+  ifscCode              String?
+  accountType           String    @default("Savings")
+  status                KycStatus @default(PENDING)
+  isPanVerified         Boolean   @default(false)
+  isAadharVerified      Boolean   @default(false)
+  isUpiLinked           Boolean   @default(false)
+  isBankLinked          Boolean   @default(false)
+  submittedAt           DateTime  @default(now())
+  reviewedAt            DateTime?
+  rejectionReason       String?
+  panVerifiedAt         DateTime?
+  aadharVerifiedAt      DateTime?
+  panVerificationMeta   Json?
+  aadharVerificationMeta Json?
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Follows {
@@ -174,7 +180,10 @@ model Reel {
   isTrending              Boolean            @default(false)
   copyrightFlag           Boolean            @default(false)
   ageRestricted           Boolean            @default(false)
-  durationSeconds         Int                @default(0)
+durationSeconds         Int                @default(0)
+  muxAssetId              String?
+  muxPlaybackId           String?
+  muxUploadId             String?
   challengeId             String?
    challengeApprovalStatus ReelApprovalStatus @default(PENDING)
   allowComments           Boolean            @default(true)
@@ -939,6 +948,36 @@ enum LedgerSource {
   FRAUD_REVERSAL
   BONUS
   ADJUSTMENT
+  COIN_PURCHASE
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  CANCELLED
+  REFUNDED
+}
+
+model PaymentRecord {
+  id                String        @id @default(uuid())
+  userId            String
+  packageId         String
+  razorpayOrderId   String        @unique
+  razorpayPaymentId String?       @unique
+  amount            Int
+  currency          String        @default("INR")
+  coinsToCredit     Int
+  status            PaymentStatus @default(PENDING)
+  gateway           String        @default("RAZORPAY")
+  paymentMethod     String?
+  verifiedAt        DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  @@index([userId])
+  @@index([razorpayOrderId])
+  @@index([razorpayPaymentId])
 }
 
 enum WithdrawalStatus {

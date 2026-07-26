@@ -278,3 +278,10 @@
 {"timestamp":"2026-07-24T10:30:24.871Z","status":401,"res":{"success":false,"code":"INVALID_TOKEN","message":"Authentication token is invalid or expired."}}
 {"timestamp":"2026-07-24T10:30:24.875Z","status":401,"res":{"success":false,"code":"INVALID_TOKEN","message":"Authentication token is invalid or expired."}}
 {"timestamp":"2026-07-24T10:30:24.918Z","status":401,"res":{"success":false,"code":"INVALID_TOKEN","message":"Authentication token is invalid or expired."}}
+{"timestamp":"2026-07-26T10:47:01.422Z","status":404,"res":{"message":"Cannot GET /system/configs?keys=TDS_PERCENTAGE,PLATFORM_FEE_PERCENTAGE","error":"Not Found","statusCode":404}}
+{"timestamp":"2026-07-26T10:51:01.751Z","status":404,"res":{"message":"Cannot GET /system/configs?keys=TDS_PERCENTAGE,PLATFORM_FEE_PERCENTAGE","error":"Not Found","statusCode":404}}
+{"timestamp":"2026-07-26T11:27:44.695Z","status":500,"res":{"message":"PAN verification service unavailable. Please try again.","error":"Internal Server Error","statusCode":500}}
+{"timestamp":"2026-07-26T11:27:55.792Z","status":400,"res":{"message":"Invalid Aadhaar number. Please check and re-enter.","error":"Bad Request","statusCode":400}}
+{"timestamp":"2026-07-26T11:28:07.331Z","status":400,"res":{"message":"Invalid Aadhaar number. Please check and re-enter.","error":"Bad Request","statusCode":400}}
+{"timestamp":"2026-07-26T11:28:11.385Z","status":500,"res":{"message":"Aadhaar verification service unavailable. Please try again.","error":"Internal Server Error","statusCode":500}}
+{"timestamp":"2026-07-26T11:28:21.477Z","status":500,"res":{"message":"Aadhaar verification service unavailable. Please try again.","error":"Internal Server Error","statusCode":500}}
