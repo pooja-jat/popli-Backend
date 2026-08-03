@@ -95,7 +95,7 @@ export class CreateReelDto {
   @IsString()
   @IsOptional()
   challengeId?: string;
-  @ApiPropertyOptional()
+@ApiPropertyOptional()
   @IsOptional()
   location?: {
     locationName: string;
@@ -103,6 +103,26 @@ export class CreateReelDto {
     longitude?: number;
     placeId?: string;
   };
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  muxAssetId?: string;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  muxPlaybackId?: string;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  muxUploadId?: string;
+
+  @ApiPropertyOptional()
+  @IsNumber()
+  @IsOptional()
+  durationSeconds?: number;
 }
 
 export class AddCommentDto {

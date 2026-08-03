@@ -1,5 +1,14 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import {
+  Controller,
+  Post,
+  Query,
+  UseGuards,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiConsumes, ApiBody, ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { UploadService } from './upload.service';
 
@@ -10,16 +19,32 @@ import { UploadService } from './upload.service';
 export class UploadController {
   constructor(private readonly uploadService: UploadService) {}
 
-  @Get('presign')
-  @ApiOperation({ summary: 'Get R2 presigned URL for direct image upload' })
+  @Post('image')
+  @ApiOperation({ summary: 'Upload image to Cloudinary' })
+  @ApiConsumes('multipart/form-data')
   @ApiQuery({ name: 'folder', required: false })
-  @ApiQuery({ name: 'filename', required: true })
-  @ApiQuery({ name: 'contentType', required: true })
-  getPresignedUrl(
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', format: 'binary' },
+      },
+    },
+  })
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 10 * 1024 * 1024 },
+    }),
+  )
+  async uploadImage(
+    @UploadedFile() file: Express.Multer.File,
     @Query('folder') folder: string = 'general',
-    @Query('filename') filename: string,
-    @Query('contentType') contentType: string,
   ) {
-    return this.uploadService.getPresignedUploadUrl(folder, filename, contentType);
+    if (!file) throw new BadRequestException('No file provided');
+    const result = await this.uploadService.uploadImage(file.buffer, file.mimetype, folder);
+    return {
+      url: result.secureUrl,
+      publicId: result.publicId,
+    };
   }
 }

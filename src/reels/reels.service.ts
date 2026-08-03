@@ -16,6 +16,7 @@ import { extractHashtags } from '../utils/hashtags.util';
 import { ChallengesGateway } from '../challenges/challenges.gateway';
 import { checkAndProcessReferral } from '../utils/referral.util';
 import { getViewerRewardConfig, getLikerRewardConfig } from './reels-reward-config.util';
+import { VideoService } from '../video/video.service';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { VIEW_EARNINGS_QUEUE, ViewEarningsJobData } from '../queue/view-earnings.queue';
@@ -24,16 +25,16 @@ import { VIEW_EARNINGS_QUEUE, ViewEarningsJobData } from '../queue/view-earnings
 export class ReelsService {
   private readonly logger = new Logger(ReelsService.name);
 
- constructor(
+constructor(
     private prisma: PrismaService,
     private chatService: ChatService,
     private notificationsGateway: NotificationsGateway,
     private notificationsService: NotificationsService,
     private hashtagsService: HashtagsService,
     private challengesGateway: ChallengesGateway,
+    private videoService: VideoService,
     @InjectQueue(VIEW_EARNINGS_QUEUE) private viewEarningsQueue: Queue<ViewEarningsJobData>,
   ) {}
-
   async createReel(creatorId: string, dto: CreateReelDto) {
     let layersData = dto.layersData;
     if (typeof layersData === 'string') {
@@ -1257,10 +1258,8 @@ async deleteReel(reelId: string, userId: string) {
 
     await this.hashtagsService.removeHashtagsForReel(reelId);
 
-    if (reel.muxAssetId) {
-      const { VideoService } = await import('../video/video.service');
-      const videoService = new VideoService(this.prisma);
-      await videoService.deleteAsset(reel.muxAssetId);
+  if (reel.muxAssetId) {
+      await this.videoService.deleteAsset(reel.muxAssetId);
     }
 
     return this.prisma.reel.delete({

@@ -7,6 +7,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { HashtagsModule } from '../hashtags/hashtags.module';
 import { ChallengesModule } from '../challenges/challenges.module';
 import { QueueModule } from '../queue/queue.module';
+import { VideoModule } from '../video/video.module';
 
 @Module({
   imports: [
@@ -15,7 +16,8 @@ import { QueueModule } from '../queue/queue.module';
     NotificationsModule,
     HashtagsModule,
     ChallengesModule,
-    QueueModule,
+QueueModule,
+    VideoModule,
   ],
   controllers: [ReelsController],
   providers: [ReelsService],
