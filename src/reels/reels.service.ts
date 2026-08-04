@@ -17,9 +17,8 @@ import { ChallengesGateway } from '../challenges/challenges.gateway';
 import { checkAndProcessReferral } from '../utils/referral.util';
 import { getViewerRewardConfig, getLikerRewardConfig } from './reels-reward-config.util';
 import { VideoService } from '../video/video.service';
-import { InjectQueue } from '@nestjs/bullmq';
-import { Queue } from 'bullmq';
-import { VIEW_EARNINGS_QUEUE, ViewEarningsJobData } from '../queue/view-earnings.queue';
+import { RedisService } from '../redis/redis.service';
+import { PlatformService } from '../platform/platform.service';
 
 @Injectable()
 export class ReelsService {
@@ -33,7 +32,8 @@ constructor(
     private hashtagsService: HashtagsService,
     private challengesGateway: ChallengesGateway,
     private videoService: VideoService,
-    @InjectQueue(VIEW_EARNINGS_QUEUE) private viewEarningsQueue: Queue<ViewEarningsJobData>,
+    private redis: RedisService,
+    private platformService: PlatformService,
   ) {}
   async createReel(creatorId: string, dto: CreateReelDto) {
     let layersData = dto.layersData;
@@ -977,9 +977,16 @@ select: { reelId: true, credit: true },
       return { success: true, ignored: true, reason: 'creator' };
     }
 
-    // In production, we check if watchDuration >= 10000ms
-    const isValidDuration = (metrics?.watchDuration ?? 10000) >= 10000;
+  let minWatchDurationMs = 10000;
+    try {
+      const earningConfig = await this.platformService.getEarningConfig();
+      minWatchDurationMs = earningConfig.minWatchDurationMs;
+    } catch (err: any) {
+      this.logger.error(`getEarningConfig failed, using default 10000ms: ${err?.message}`);
+    }
+    const isValidDuration = (metrics?.watchDuration ?? minWatchDurationMs) >= minWatchDurationMs;
 
+this.logger.log(`incrementView debug — userId: ${userId} isValidDuration: ${isValidDuration} watchDuration: ${metrics?.watchDuration} minWatch: ${minWatchDurationMs}`);
     if (userId && isValidDuration) {
       // Check if user already has a ValidView for this reel
       const existingValidView = await this.prisma.validView.findUnique({
@@ -990,11 +997,12 @@ select: { reelId: true, credit: true },
         let validView;
         try {
           validView = await this.prisma.$transaction(async (tx) => {
-            const created = await tx.validView.create({
+       const created = await tx.validView.create({
               data: {
                 reelId,
                 userId,
                 deviceId: metrics?.deviceId,
+                isProcessed: false,
               },
             });
 
@@ -1012,7 +1020,8 @@ select: { reelId: true, credit: true },
 
             return created;
           });
-        } catch (error: any) {
+   } catch (error: any) {
+          this.logger.error(`ValidView transaction FAILED — code: ${error.code} message: ${error.message} meta: ${JSON.stringify(error.meta)}`);
           if (error.code === 'P2002') {
             this.logger.warn(`ValidView device conflict for reel ${reelId}, device ${metrics?.deviceId}`);
             return { success: true, isValidForEarning: false, reason: 'duplicate_device' };
@@ -1020,27 +1029,13 @@ select: { reelId: true, credit: true },
           throw error;
         }
 
-        isValidForEarning = true;
+ isValidForEarning = true;
 
-        this.viewEarningsQueue.add(
-          'process-view',
-          {
-            validViewId: validView.id,
-            reelId,
-            creatorId: reel.creatorId,
-            watchDuration: metrics?.watchDuration ?? 10000,
-          },
-          {
-            attempts: 3,
-            backoff: { type: 'exponential', delay: 5000 },
-            removeOnComplete: 100,
-            removeOnFail: 50,
-          },
-        ).catch((err) => {
-          this.logger.warn(`Failed to enqueue view job for reel ${reelId}: ${err.message}`);
+        this.redis.incr(`reel:view-count:${reelId}`).catch((err) => {
+          this.logger.warn(`Redis INCR failed for reel ${reelId}: ${err.message}`);
         });
 
-   // Award Coins to Viewer — rate and cap from SystemConfig
+
         const viewerRewardConfig = await getViewerRewardConfig(this.prisma);
         const { coinRewardPerView: viewReward, maxDailyCoins: maxDailyViews } = viewerRewardConfig;
 

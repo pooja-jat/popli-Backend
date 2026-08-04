@@ -7,29 +7,22 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RechargeDto, WithdrawDto } from './dto/wallet.dto';
 import { Prisma } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
-import { calcViewEarnings } from '../utils/earningCalculator';
-import { getViewRate } from '../utils/rateConfig';
+import { PlatformService } from '../platform/platform.service';
+import { EarningsService } from '../earnings/earnings.service';
+
 
 @Injectable()
 export class WalletService {
   private readonly logger = new Logger(WalletService.name);
-
 constructor(
     private prisma: PrismaService,
     private notificationsService: NotificationsService,
+    private platformService: PlatformService,
+    private earningsService: EarningsService,
   ) {}
+ async processViewEarnings() {
+    this.logger.log('Starting Fallback View Earnings Processing...');
 
-  @Cron('0 */6 * * *')
-  async processViewEarnings() {
-    this.logger.log('Starting Hourly View Earnings Processing...');
-
-    // Fetch dynamic rates from SystemConfig (or fallback to defaults)
- const ratePer1000 = await getViewRate(this.prisma);
-
-   // 1. Find unprocessed ValidViews older than 1 hour only.
-    // This cron is a safety net for views the queue failed to process (all retries
-    // exhausted) — NOT a duplicate processing path. Views newer than the cutoff are
-    // left for the queue processor, avoiding a race where both credit the same view.
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
     const unprocessedViews = await this.prisma.validView.findMany({
       where: { isProcessed: false, createdAt: { lt: oneHourAgo } },
@@ -41,133 +34,110 @@ constructor(
       return;
     }
 
-    // 2. Create Earning Batch
     const batch = await this.prisma.earningBatch.create({
-      data: {
-        status: 'PROCESSING',
-        totalViews: unprocessedViews.length,
-        totalEarnings: 0, // Will update later
-      },
+      data: { status: 'PROCESSING', totalViews: unprocessedViews.length, totalEarnings: 0 },
     });
 
-// 3. Group views by Creator AND Reel, keeping the exact view IDs so we only
-    // claim/mark the specific views we counted (not any view sharing the reelId).
+   const { viewsPerReward, rewardAmountPaise } = await this.platformService.getEarningConfig();
+
     const reelViewsMap = new Map<string, { creatorId: string; viewIds: string[] }>();
     for (const view of unprocessedViews) {
       if (view.reel.isMonetized && view.reel.mediaType === 'VIDEO') {
-        const key = view.reelId;
-        const existing = reelViewsMap.get(key);
+        const existing = reelViewsMap.get(view.reelId);
         if (existing) {
           existing.viewIds.push(view.id);
         } else {
-          reelViewsMap.set(key, { creatorId: view.reel.creatorId, viewIds: [view.id] });
+          reelViewsMap.set(view.reelId, { creatorId: view.reel.creatorId, viewIds: [view.id] });
         }
       }
     }
 
-    // Group total views per creator for single wallet update + notification
-    const creatorTotals = new Map<string, { totalViews: number; totalNet: number }>();
+    const creatorTotals = new Map<string, { totalViews: number; totalNetPaise: number }>();
     for (const [, { creatorId, viewIds }] of reelViewsMap.entries()) {
       const existing = creatorTotals.get(creatorId);
       if (existing) {
         existing.totalViews += viewIds.length;
       } else {
-        creatorTotals.set(creatorId, { totalViews: viewIds.length, totalNet: 0 });
+        creatorTotals.set(creatorId, { totalViews: viewIds.length, totalNetPaise: 0 });
       }
     }
 
-    let totalBatchEarnings = 0;
+    let totalBatchEarningsPaise = 0;
 
-    // 4. Process payouts per reel inside transactions
-   for (const [reelId, { creatorId, viewIds }] of reelViewsMap.entries()) {
+    for (const [reelId, { creatorId, viewIds }] of reelViewsMap.entries()) {
       if (viewIds.length < 1) continue;
 
       try {
-        await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-          // Atomically claim only these exact view IDs. If some were already claimed
-          // by the queue processor meanwhile, claim.count is lower than viewIds.length —
-          // we only pay for what we actually claimed just now.
-          const claim = await tx.validView.updateMany({
-            where: { id: { in: viewIds }, isProcessed: false },
-            data: { isProcessed: true, batchId: batch.id },
-          });
+      const claim = await this.prisma.validView.updateMany({
+          where: { id: { in: viewIds }, isProcessed: false },
+          data: { isProcessed: true, batchId: batch.id },
+        });
 
-          if (claim.count === 0) return;
+        if (claim.count === 0) continue;
 
-          const grossEarnings = calcViewEarnings(claim.count, ratePer1000);
+        const viewCountRows = await this.prisma.$queryRaw<Array<{ totalViews: number; lastMilestone: number }>>`
+          INSERT INTO "ReelViewCount" ("id", "reelId", "totalViews", "lastMilestone", "createdAt", "updatedAt")
+          VALUES (gen_random_uuid(), ${reelId}, ${claim.count}, 0, NOW(), NOW())
+          ON CONFLICT ("reelId") DO UPDATE
+          SET "totalViews" = "ReelViewCount"."totalViews" + ${claim.count}, "updatedAt" = NOW()
+          RETURNING "totalViews", "lastMilestone"
+        `;
 
-          if (grossEarnings > 0) {
-            totalBatchEarnings += grossEarnings;
+        const totalViews = Number(viewCountRows[0].totalViews);
+        const lastMilestone = Number(viewCountRows[0].lastMilestone);
+        const currentMilestone = Math.floor(totalViews / viewsPerReward);
 
-            const creatorTotal = creatorTotals.get(creatorId)!;
-            creatorTotal.totalNet += grossEarnings;
+        if (currentMilestone <= lastMilestone) continue;
 
-            const wallet = await tx.wallet.upsert({
-              where: { userId: creatorId },
-              create: {
-                userId: creatorId,
-                withdrawableBalance: grossEarnings,
-                totalEarnings: grossEarnings,
-              },
-              update: {
-                withdrawableBalance: { increment: grossEarnings },
-                totalEarnings: { increment: grossEarnings },
-              },
-            });
+        const milestonesEarned = currentMilestone - lastMilestone;
+        const earnedPaise = milestonesEarned * rewardAmountPaise;
 
-        await tx.walletLedger.create({
-              data: {
-                userId: creatorId,
-                walletId: wallet.id,
-                source: 'VIEW_EARNING',
-                sourceId: batch.id,
-                reelId: reelId,
-                credit: grossEarnings,
-                balanceAfter: wallet.withdrawableBalance + grossEarnings,
-                description: `Reel earnings for ${claim.count} views. Gross: ₹${grossEarnings.toFixed(2)} (TDS & platform fee deducted at withdrawal)`,
-              },
-            });
-          }
+        totalBatchEarningsPaise += earnedPaise;
+
+        const creatorTotal = creatorTotals.get(creatorId)!;
+        creatorTotal.totalNetPaise += earnedPaise;
+
+        await this.earningsService.creditViewMilestone({
+          reelId,
+          creatorId,
+          totalViews,
+          currentMilestone,
+          lastMilestone,
+          sourceId: batch.id,
         });
       } catch (error) {
-        this.logger.error(
-          `Failed to process earnings for reel ${reelId}:`,
-          error,
-        );
+        this.logger.error(`Failed to process earnings for reel ${reelId}:`, error);
       }
     }
 
-    // 5. Send one notification per creator
-    for (const [creatorId, { totalViews, totalNet }] of creatorTotals.entries()) {
-      if (totalNet > 0) {
-       await this.notificationsService.createAndPush(
+    for (const [creatorId, { totalViews, totalNetPaise }] of creatorTotals.entries()) {
+      if (totalNetPaise > 0) {
+        await this.notificationsService.createAndPush(
           {
             userId: creatorId,
             type: 'SYSTEM',
             title: 'Earnings Updated!',
-            body: `You just earned ₹${totalNet.toFixed(2)} from ${totalViews} valid views!`,
+            body: `You earned ₹${totalNetPaise / 100} from ${totalViews} valid views!`,
           },
           'Earnings Updated!',
-          `You just earned ₹${totalNet.toFixed(2)} from ${totalViews} valid views!`,
+          `You earned ₹${totalNetPaise / 100} from ${totalViews} valid views!`,
         ).catch(() => {});
       }
     }
 
-    // 5. Complete Batch
     await this.prisma.earningBatch.update({
       where: { id: batch.id },
       data: {
         status: 'COMPLETED',
-        totalEarnings: totalBatchEarnings,
+        totalEarnings: totalBatchEarningsPaise,
         processedAt: new Date(),
       },
     });
 
     this.logger.log(
-      `Hourly earnings calculation completed. Batch ID: ${batch.id}. Total Creators: ${creatorTotals.size}. Total Net Payout: ₹${totalBatchEarnings}`,
+      `Fallback earnings done. Batch: ${batch.id}. Creators: ${creatorTotals.size}. Total: ₹${totalBatchEarningsPaise / 100}`,
     );
   }
-
 private async checkReferralUnlockEligibility(
     tx: Prisma.TransactionClient | PrismaService,
     userId: string,
@@ -286,7 +256,7 @@ private async checkReferralUnlockEligibility(
         bonusEarnings += agg._sum.credit || 0;
     }
 
-    return {
+return {
       ...targetWallet,
       viewEarnings,
       giftEarnings,
@@ -310,31 +280,8 @@ private async checkReferralUnlockEligibility(
 
     const eligible = await this.checkReferralUnlockEligibility(this.prisma, userId);
 
-    const [minWithdrawConfig, tdsConfig, feeConfig] = await Promise.all([
-      this.prisma.systemConfig.findUnique({ where: { key: 'MIN_WITHDRAWAL_INR' } }),
-      this.prisma.systemConfig.findUnique({ where: { key: 'TDS_PERCENTAGE' } }),
-      this.prisma.systemConfig.findUnique({ where: { key: 'PLATFORM_FEE_PERCENTAGE' } }),
-    ]);
-
-   if (!minWithdrawConfig || typeof minWithdrawConfig.valueJson !== 'number') {
-      throw new BadRequestException(
-        'Platform configuration MIN_WITHDRAWAL_INR is not set. Contact support.',
-      );
-    }
-    if (!tdsConfig || typeof tdsConfig.valueJson !== 'number') {
-      throw new BadRequestException(
-        'Platform configuration TDS_PERCENTAGE is not set. Contact support.',
-      );
-    }
-    if (!feeConfig || typeof feeConfig.valueJson !== 'number') {
-      throw new BadRequestException(
-        'Platform configuration PLATFORM_FEE_PERCENTAGE is not set. Contact support.',
-      );
-    }
-
-    const minWithdrawal = minWithdrawConfig.valueJson;
-    const tdsPercent = tdsConfig.valueJson;
-    const feePercent = feeConfig.valueJson;
+const { minWithdrawalInr: minWithdrawal, tdsPercentage: tdsPercent, platformFeePercentage: feePercent } =
+      await this.platformService.getWithdrawalConfig();
 
     if (dto.amount < minWithdrawal) {
       throw new BadRequestException(`Minimum withdrawal amount is ₹${minWithdrawal}`);

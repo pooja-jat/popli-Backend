@@ -21,7 +21,10 @@ async function seedInterests() {
 async function seedConfigs() {
   console.log('\n--- Seeding System Configs ---');
   const configs = [
-    { key: 'VIEW_RATE_PER_1000', valueJson: 5, description: 'INR earned by creator per 1,000 valid views' },
+  { key: 'VIEW_RATE_PER_1000', valueJson: 5, description: 'INR earned by creator per 1,000 valid views (legacy — superseded by VIEWS_PER_REWARD and REWARD_AMOUNT_PAISE)' },
+    { key: 'VIEWS_PER_REWARD', valueJson: 200, description: 'Number of valid views required to earn one reward milestone' },
+    { key: 'REWARD_AMOUNT_PAISE', valueJson: 100, description: 'INR reward in paise credited to creator per completed milestone (100 paise = ₹1)' },
+    { key: 'MIN_WATCH_DURATION_MS', valueJson: 10000, description: 'Minimum watch duration in milliseconds for a view to be counted as valid' },
     { key: 'MIN_WITHDRAWAL_INR', valueJson: 500, description: 'Minimum INR amount a creator can withdraw' },
     { key: 'TDS_PERCENTAGE', valueJson: 10, description: 'TDS percentage deducted at withdrawal time' },
     { key: 'PLATFORM_FEE_PERCENTAGE', valueJson: 2, description: 'Platform fee percentage deducted at withdrawal time' },

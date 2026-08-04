@@ -12,11 +12,17 @@ import {
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AdminService } from './admin.service';
+import { RedisService } from '../redis/redis.service';
+import { KafkaProducerService } from '../kafka/kafka-producer.service';
 
 @ApiTags('admin')
 @Controller('admin')
 export class AdminController {
-  constructor(private readonly adminService: AdminService) {}
+  constructor(
+    private readonly adminService: AdminService,
+    private readonly redisService: RedisService,
+    private readonly kafkaProducer: KafkaProducerService,
+  ) {}
 
   @Post('auth/login')
   @ApiOperation({ summary: 'Admin Login' })
@@ -419,11 +425,32 @@ export class AdminController {
     return this.adminService.resolveReport(reportId, body.action, req.user.id);
   }
 
-  @Post('tickets/:id/reply')
+@Post('tickets/:id/reply')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Reply to a support ticket' })
   replyToTicket(@Param('id') ticketId: string, @Body() body: any, @Req() req: any) {
     return this.adminService.replyToTicket(ticketId, body.message, req.user.id);
+  }
+
+  @Get('platform/earning-settings')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get earning configuration settings' })
+  getEarningSettings(@Req() req: any) {
+    return this.adminService.getEarningSettings(req.user.id);
+  }
+
+  @Patch('platform/earning-settings')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update earning configuration — updates DB, Redis cache, and broadcasts via Kafka' })
+  updateEarningSettings(@Body() body: any, @Req() req: any) {
+    return this.adminService.updateEarningSettings(
+      body,
+      req.user.id,
+      this.redisService,
+      this.kafkaProducer,
+    );
   }
 }

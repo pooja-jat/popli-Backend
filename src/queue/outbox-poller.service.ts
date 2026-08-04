@@ -1,9 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
-import { InjectQueue } from '@nestjs/bullmq';
-import { Queue } from 'bullmq';
+import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
-import { VIEW_EARNINGS_QUEUE, ViewEarningsJobData } from './view-earnings.queue';
+import { KafkaProducerService } from '../kafka/kafka-producer.service';
 
 @Injectable()
 export class OutboxPollerService {
@@ -11,10 +9,10 @@ export class OutboxPollerService {
 
   constructor(
     private readonly prisma: PrismaService,
-    @InjectQueue(VIEW_EARNINGS_QUEUE) private viewEarningsQueue: Queue<ViewEarningsJobData>,
+    private readonly kafkaProducer: KafkaProducerService,
   ) {}
 
-  @Cron(CronExpression.EVERY_30_SECONDS)
+  @Cron('*/5 * * * * *')
   async pollOutbox() {
     const events = await this.prisma.outboxEvent.findMany({
       where: {
@@ -27,36 +25,17 @@ export class OutboxPollerService {
 
     if (events.length === 0) return;
 
-    this.logger.log(`Outbox poller found ${events.length} pending events`);
+    this.logger.log(`Outbox poller: ${events.length} pending events`);
 
     for (const event of events) {
       try {
         if (event.type === 'VIEW_EARNING') {
-         const payload = event.payload as unknown as ViewEarningsJobData;
-
-          const existingValidView = await this.prisma.validView.findUnique({
-            where: { id: payload.validViewId },
-            select: { isProcessed: true },
-          });
-
-          if (existingValidView?.isProcessed) {
-            await this.prisma.outboxEvent.update({
-              where: { id: event.id },
-              data: { status: 'PROCESSED', processedAt: new Date() },
-            });
-            continue;
-          }
-
-          await this.viewEarningsQueue.add(
-            'process-view',
-            payload,
+          await this.kafkaProducer.publish('reel-view-events', [
             {
-              attempts: 3,
-              backoff: { type: 'exponential', delay: 5000 },
-              removeOnComplete: 100,
-              removeOnFail: 50,
+              key: (event.payload as any).reelId,
+              value: JSON.stringify(event.payload),
             },
-          );
+          ]);
 
           await this.prisma.outboxEvent.update({
             where: { id: event.id },

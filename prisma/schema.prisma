@@ -198,8 +198,9 @@ durationSeconds         Int                @default(0)
   reports                 Report[]           @relation("ReportedReel")
   saves                   Save[]
   shares                  Share[]
-  validViews              ValidView[]
+validViews              ValidView[]
   watchHistory            WatchHistory[]
+  reelViewCount           ReelViewCount?
   taggedUsers             User[]             @relation("ReelTaggedUsers")
 }
 
@@ -695,6 +696,18 @@ model ValidView {
 
   @@unique([reelId, userId])
   @@unique([reelId, deviceId])
+}
+
+model ReelViewCount {
+  id            String   @id @default(uuid())
+  reelId        String   @unique
+  totalViews    Int      @default(0)
+  lastMilestone Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  reel          Reel     @relation(fields: [reelId], references: [id], onDelete: Cascade)
+
+  @@index([reelId])
 }
 
 model EarningBatch {

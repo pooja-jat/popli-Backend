@@ -31,30 +31,18 @@ import { HashtagsModule } from './hashtags/hashtags.module';
 import { SystemModule } from './system/system.module';
 import { CoinPackagesModule } from './coin-packages/coin-packages.module';
 import { QueueModule } from './queue/queue.module';
-import { BullModule } from '@nestjs/bullmq';
+import { RedisModule } from './redis/redis.module';
+import { KafkaModule } from './kafka/kafka.module';
+import { PlatformModule } from './platform/platform.module';
 
 @Module({
   imports: [
-    ThrottlerModule.forRoot([
-      {
-        ttl: 60000,
-        limit: 100, // 100 requests per minute
-      },
-    ]),
+    ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
     CacheModule.register({ isGlobal: true }),
-   ScheduleModule.forRoot(),
-BullModule.forRootAsync({
-      useFactory: () => {
-        const redisUrl = new URL(process.env.REDIS_URL!);
-        return {
-          connection: {
-            host: redisUrl.hostname,
-            port: Number(redisUrl.port) || 6379,
-            password: redisUrl.password || undefined,
-          },
-        };
-      },
-    }),
+    ScheduleModule.forRoot(),
+    RedisModule,
+    KafkaModule,
+    PlatformModule,
     QueueModule,
     PrismaModule,
     AuthModule,
@@ -69,17 +57,17 @@ BullModule.forRootAsync({
     KycModule,
     SupportModule,
     AdminModule,
-   ChatModerationModule,
+    ChatModerationModule,
     FeedModule,
-   UploadModule,
+    UploadModule,
     VideoModule,
     AnalyticsModule,
     SearchModule,
     InterestsModule,
     ChallengesModule,
     HashtagsModule,
-  SystemModule,
-  CoinPackagesModule,
+    SystemModule,
+    CoinPackagesModule,
     SecurityModule,
   ],
   controllers: [AppController],

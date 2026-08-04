@@ -686,7 +686,93 @@ return this.prisma.coinPackage.update({
       },
     });
   }
-async deleteCoinPackage(packageId: string, adminId: string) {
+async getEarningSettings(adminId: string) {
+    const admin = await this.prisma.user.findUnique({ where: { id: adminId } });
+    if (!admin || admin.role !== 'ADMIN') throw new UnauthorizedException('Not authorized');
+
+    const keys = ['VIEWS_PER_REWARD', 'REWARD_AMOUNT_PAISE', 'EARNINGS_ENABLED'];
+    const rows = await this.prisma.systemConfig.findMany({ where: { key: { in: keys } } });
+    const map: Record<string, any> = {};
+    rows.forEach((r) => { map[r.key] = r.valueJson; });
+
+    return {
+      viewsPerReward: map['VIEWS_PER_REWARD'] ?? 200,
+      rewardAmountPaise: map['REWARD_AMOUNT_PAISE'] ?? 100,
+      earningsEnabled: map['EARNINGS_ENABLED'] ?? true,
+    };
+  }
+
+  async updateEarningSettings(
+    data: { viewsPerReward?: number; rewardAmountPaise?: number; earningsEnabled?: boolean },
+    adminId: string,
+    redisService: any,
+    kafkaProducer: any,
+  ) {
+    const admin = await this.prisma.user.findUnique({ where: { id: adminId } });
+    if (!admin || admin.role !== 'ADMIN') throw new UnauthorizedException('Not authorized');
+
+    const updates: Promise<any>[] = [];
+
+    if (data.viewsPerReward !== undefined) {
+      updates.push(
+        this.prisma.systemConfig.upsert({
+          where: { key: 'VIEWS_PER_REWARD' },
+          update: { valueJson: data.viewsPerReward, updatedBy: adminId },
+          create: { key: 'VIEWS_PER_REWARD', valueJson: data.viewsPerReward, updatedBy: adminId },
+        }),
+      );
+    }
+
+    if (data.rewardAmountPaise !== undefined) {
+      updates.push(
+        this.prisma.systemConfig.upsert({
+          where: { key: 'REWARD_AMOUNT_PAISE' },
+          update: { valueJson: data.rewardAmountPaise, updatedBy: adminId },
+          create: { key: 'REWARD_AMOUNT_PAISE', valueJson: data.rewardAmountPaise, updatedBy: adminId },
+        }),
+      );
+    }
+
+    if (data.earningsEnabled !== undefined) {
+      updates.push(
+        this.prisma.systemConfig.upsert({
+          where: { key: 'EARNINGS_ENABLED' },
+          update: { valueJson: data.earningsEnabled, updatedBy: adminId },
+          create: { key: 'EARNINGS_ENABLED', valueJson: data.earningsEnabled, updatedBy: adminId },
+        }),
+      );
+    }
+
+    await Promise.all(updates);
+
+    await redisService.del('platform:earning-config');
+
+    await kafkaProducer.publish('platform-settings-updated', [
+      {
+        key: 'earning-config',
+        value: JSON.stringify({
+          event: 'platform-settings-updated',
+          updatedBy: adminId,
+          timestamp: new Date().toISOString(),
+          data,
+        }),
+      },
+    ]);
+
+    await this.prisma.auditLog.create({
+      data: {
+        actorId: adminId,
+        action: 'EARNING_SETTINGS_UPDATED',
+        entityType: 'SystemConfig',
+        entityId: 'earning-settings',
+        newValue: data,
+      },
+    });
+
+    return { success: true, updated: data };
+  }
+
+  async deleteCoinPackage(packageId: string, adminId: string) {
     const admin = await this.prisma.user.findUnique({ where: { id: adminId } });
     if (!admin || admin.role !== 'ADMIN')
       throw new UnauthorizedException('Not authorized');
