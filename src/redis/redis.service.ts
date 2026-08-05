@@ -4,7 +4,7 @@ import Redis from 'ioredis';
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(RedisService.name);
-  private client: Redis;
+  private client!: Redis;
 
   onModuleInit() {
     this.client = new Redis(process.env.REDIS_URL!, {
@@ -35,6 +35,11 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     } else {
       await this.client.set(key, value);
     }
+  }
+
+async setNx(key: string, value: string, ttlSeconds: number): Promise<boolean> {
+    const result = await this.client.set(key, value, 'EX', ttlSeconds, 'NX');
+    return result === 'OK';
   }
 
   async del(key: string): Promise<void> {

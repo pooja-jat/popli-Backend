@@ -67,13 +67,22 @@ export class KafkaConsumerService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async processViewEvent(payload: {
+private async processViewEvent(payload: {
     validViewId: string;
     reelId: string;
     creatorId: string;
     watchDuration: number;
   }): Promise<void> {
     const { validViewId, reelId, creatorId } = payload;
+
+    const claimed = await this.prisma.validView.updateMany({
+      where: { id: validViewId, isProcessed: false },
+      data: { isProcessed: true },
+    });
+    if (claimed.count === 0) {
+      this.logger.warn(`View ${validViewId} already processed — skipping`);
+      return;
+    }
 
     const reel = await this.prisma.reel.findUnique({
       where: { id: reelId },
@@ -115,4 +124,4 @@ export class KafkaConsumerService implements OnModuleInit, OnModuleDestroy {
       sourceId: validViewId,
     });
   }
-}
+} 
