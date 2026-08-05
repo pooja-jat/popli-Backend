@@ -34,15 +34,17 @@ import { QueueModule } from './queue/queue.module';
 import { RedisModule } from './redis/redis.module';
 import { KafkaModule } from './kafka/kafka.module';
 import { PlatformModule } from './platform/platform.module';
+import { PayoutModule } from './payout/payout.module';
 
 @Module({
   imports: [
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
     CacheModule.register({ isGlobal: true }),
     ScheduleModule.forRoot(),
-    RedisModule,
+  RedisModule,
     KafkaModule,
     PlatformModule,
+    PayoutModule,
     QueueModule,
     PrismaModule,
     AuthModule,

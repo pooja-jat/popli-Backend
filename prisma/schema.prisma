@@ -655,12 +655,21 @@ model WithdrawalRequest {
   platformFeeDeducted Float            @default(0.0)
   netPayable          Float            @default(0.0)
   rejectionReason     String?
+  rejectedBy          String?
+  rejectedAt          DateTime?
   transactionId       String?
+  idempotencyKey      String?          @unique
+  payoutId            String?
+  providerResponse    Json?
+  processedBy         String?
+  processedAt         DateTime?
+  oldBalance          Float?
+  newBalance          Float?
+  ipAddress           String?
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
   wallet              Wallet           @relation(fields: [walletId], references: [id], onDelete: Cascade)
 }
-
 model ViewEvent {
   id                String   @id @default(uuid())
   reelId            String
@@ -936,8 +945,11 @@ enum NotificationType {
   CHALLENGE_APPROVED        @map("challenge_approved")
   CHALLENGE_REJECTED        @map("challenge_rejected")
   SYSTEM                    @map("system")
+  WITHDRAWAL_APPROVED       @map("withdrawal_approved")
+  WITHDRAWAL_REJECTED       @map("withdrawal_rejected")
+  WITHDRAWAL_PROCESSING     @map("withdrawal_processing")
+  WITHDRAWAL_FAILED         @map("withdrawal_failed")
 }
-
 enum ChallengeRewardStatus {
   PENDING
   PROCESSING

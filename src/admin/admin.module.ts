@@ -6,10 +6,16 @@ import { AdminPartnerService } from './admin-partner.service';
 import { AdminPartnerController } from './admin-partner.controller';
 import { PlatformJobsService } from './platform-jobs.service';
 import { PrismaModule } from '../prisma/prisma.module';
+import { PayoutModule } from '../payout/payout.module';
+import { RedisModule } from '../redis/redis.module';
+import { KafkaModule } from '../kafka/kafka.module';
 
 @Module({
   imports: [
     PrismaModule,
+    PayoutModule,
+    RedisModule,
+    KafkaModule,
     JwtModule.register({
       secret: process.env.JWT_SECRET || 'fallback_secret',
       signOptions: { expiresIn: '1d' },

@@ -18,7 +18,7 @@ export class KafkaProducerService implements OnModuleInit, OnModuleDestroy {
       clientId: 'popli-backend',
       brokers: [process.env.KAFKA_BROKER!],
       ssl,
-      sasl: {
+      sasl: { 
         mechanism: 'plain',
         username: process.env.KAFKA_USERNAME!,
         password: process.env.KAFKA_PASSWORD!,

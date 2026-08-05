@@ -4,16 +4,22 @@ import {
   Post,
   Patch,
   Param,
+  Query,
   UseGuards,
   Req,
   Body,
   Delete,
+  Headers,
 } from '@nestjs/common';
+import type { RawBodyRequest } from '@nestjs/common';
+import type { Request } from 'express';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AdminService } from './admin.service';
 import { RedisService } from '../redis/redis.service';
 import { KafkaProducerService } from '../kafka/kafka-producer.service';
+import { Inject } from '@nestjs/common';
+import { PayoutProvider } from '../payout/payout-provider.interface';
 
 @ApiTags('admin')
 @Controller('admin')
@@ -22,6 +28,7 @@ export class AdminController {
     private readonly adminService: AdminService,
     private readonly redisService: RedisService,
     private readonly kafkaProducer: KafkaProducerService,
+    @Inject('PAYOUT_PROVIDER') private readonly payoutProvider: PayoutProvider,
   ) {}
 
   @Post('auth/login')
@@ -55,12 +62,12 @@ export class AdminController {
   ) {
     return this.adminService.updateFeatureFlag(key, body.enabled, req.user.id);
   }
-  @Get('dashboard-stats')
+@Get('dashboard-stats')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get Dashboard Statistics' })
-  getDashboardStats(@Req() req: any) {
-    return this.adminService.getDashboardStats(req.user.id);
+  getDashboardStats(@Req() req: any, @Query('city') city?: string) {
+    return this.adminService.getDashboardStats(req.user.id, city);
   }
 
   @Get('kyc/pending')
@@ -95,28 +102,28 @@ export class AdminController {
     return this.adminService.deleteReel(reelId, req.user.id);
   }
 
-  @Get('users')
+@Get('users')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get all users' })
-  getUsers(@Req() req: any) {
-    return this.adminService.getUsers(req.user.id);
+  getUsers(@Req() req: any, @Query('page') page?: string, @Query('limit') limit?: string) {
+    return this.adminService.getUsers(req.user.id, page ? parseInt(page) : 1, limit ? parseInt(limit) : 50);
   }
 
-  @Get('reels')
+@Get('reels')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get all reels' })
-  getReels(@Req() req: any) {
-    return this.adminService.getReels(req.user.id);
+  getReels(@Req() req: any, @Query('page') page?: string, @Query('limit') limit?: string) {
+    return this.adminService.getReels(req.user.id, page ? parseInt(page) : 1, limit ? parseInt(limit) : 50);
   }
 
-  @Get('transactions')
+@Get('transactions')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get all transactions' })
-  getTransactions(@Req() req: any) {
-    return this.adminService.getTransactions(req.user.id);
+  getTransactions(@Req() req: any, @Query('page') page?: string, @Query('limit') limit?: string) {
+    return this.adminService.getTransactions(req.user.id, page ? parseInt(page) : 1, limit ? parseInt(limit) : 50);
   }
 
   @Get('reports')
@@ -135,32 +142,41 @@ export class AdminController {
     return this.adminService.getTickets(req.user.id);
   }
 
-  @Get('withdrawals')
+@Get('withdrawals')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get all withdrawal requests' })
-  getWithdrawals(@Req() req: any) {
-    return this.adminService.getWithdrawals(req.user.id);
+  getWithdrawals(@Req() req: any, @Query('page') page?: string, @Query('limit') limit?: string) {
+    return this.adminService.getWithdrawals(req.user.id, page ? parseInt(page) : 1, limit ? parseInt(limit) : 50);
   }
 
-  @Post('withdrawals/:id/approve')
+@Post('withdrawals/:id/approve')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Approve a withdrawal request' })
+  @ApiOperation({ summary: 'Approve a withdrawal request and initiate Razorpay payout' })
   approveWithdrawal(@Param('id') reqId: string, @Req() req: any) {
-    return this.adminService.approveWithdrawal(reqId, req.user.id);
+    return this.adminService.approveWithdrawal(reqId, req.user.id, this.payoutProvider);
   }
 
   @Post('withdrawals/:id/reject')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Reject a withdrawal request' })
+  @ApiOperation({ summary: 'Reject a withdrawal request (reason mandatory)' })
   rejectWithdrawal(
     @Param('id') reqId: string,
     @Body('reason') reason: string,
     @Req() req: any,
   ) {
     return this.adminService.rejectWithdrawal(reqId, req.user.id, reason);
+  }
+
+  @Post('withdrawals/payout-webhook')
+  @ApiOperation({ summary: 'Razorpay payout webhook — no auth, verified by signature' })
+  handlePayoutWebhook(
+    @Req() req: RawBodyRequest<Request>,
+    @Headers('x-razorpay-signature') signature: string,
+  ) {
+    return this.adminService.handlePayoutWebhook(req.rawBody!, signature);
   }
 
   // Gifts

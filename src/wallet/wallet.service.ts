@@ -264,23 +264,22 @@ return {
       bonusEarnings,
     };
   }
-
-  async withdraw(userId: string, dto: WithdrawDto) {
-   // Pre-fetch everything that doesn't need atomic protection — outside the tx
+async withdraw(userId: string, dto: WithdrawDto) {
     const preWallet = await this.prisma.wallet.findUnique({ where: { userId } });
     if (!preWallet) throw new BadRequestException('Wallet not found');
 
     const kyc = await this.prisma.kYCRecord.findFirst({
       where: { userId, status: 'APPROVED' },
     });
-    if (!kyc)
-      throw new BadRequestException(
-        'KYC must be completed and approved before withdrawal',
-      );
+    if (!kyc) throw new BadRequestException('KYC must be completed and approved before withdrawal');
+
+    if (!kyc.upiId && !kyc.bankAccount) {
+      throw new BadRequestException('Bank account or UPI ID must be verified in KYC before withdrawal');
+    }
 
     const eligible = await this.checkReferralUnlockEligibility(this.prisma, userId);
 
-const { minWithdrawalInr: minWithdrawal, tdsPercentage: tdsPercent, platformFeePercentage: feePercent } =
+    const { minWithdrawalInr: minWithdrawal, tdsPercentage: tdsPercent, platformFeePercentage: feePercent } =
       await this.platformService.getWithdrawalConfig();
 
     if (dto.amount < minWithdrawal) {
@@ -288,7 +287,6 @@ const { minWithdrawalInr: minWithdrawal, tdsPercentage: tdsPercent, platformFeeP
     }
 
     return this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      // Re-fetch wallet inside tx to get the latest balance atomically
       const wallet = await tx.wallet.findUnique({ where: { userId } });
       if (!wallet) throw new BadRequestException('Wallet not found');
 
@@ -316,69 +314,76 @@ const { minWithdrawalInr: minWithdrawal, tdsPercentage: tdsPercent, platformFeeP
       }
 
       const pendingRequest = await tx.withdrawalRequest.findFirst({
-        where: { walletId: wallet.id, status: 'PENDING' },
+        where: { walletId: wallet.id, status: { in: ['PENDING', 'UNDER_REVIEW', 'PROCESSING'] } },
       });
       if (pendingRequest) {
-        throw new BadRequestException('You already have a pending withdrawal request.');
+        throw new BadRequestException('You already have an active withdrawal request in progress.');
       }
 
       if (wallet.withdrawableBalance < dto.amount) {
         throw new BadRequestException('Insufficient withdrawable balance');
       }
 
-      const tdsDeducted = (dto.amount * tdsPercent) / 100;
-      const platformFeeDeducted = (dto.amount * feePercent) / 100;
-      const netPayable = dto.amount - tdsDeducted - platformFeeDeducted;
+      const tdsDeducted = Math.round((dto.amount * tdsPercent) / 100 * 100) / 100;
+      const platformFeeDeducted = Math.round((dto.amount * feePercent) / 100 * 100) / 100;
+      const netPayable = Math.round((dto.amount - tdsDeducted - platformFeeDeducted) * 100) / 100;
 
-      // 1. Create Withdrawal Request
+      const idempotencyKey = `wd_${userId}_${Date.now()}`;
+
       const withdrawal = await tx.withdrawalRequest.create({
         data: {
           walletId: wallet.id,
           amount: dto.amount,
-          netPayable: netPayable,
+          tdsDeducted,
+          platformFeeDeducted,
+          netPayable,
           status: 'PENDING',
-          transactionId: dto.upiId, // Reusing field for UPI
+          idempotencyKey,
+          oldBalance: wallet.withdrawableBalance,
         },
       });
 
-      // 2. Lock the funds safely preventing race conditions
       let updatedWallet;
       try {
         updatedWallet = await tx.wallet.update({
           where: { id: wallet.id, withdrawableBalance: { gte: dto.amount } },
           data: { withdrawableBalance: { decrement: dto.amount } },
         });
-      } catch (e) {
-        throw new BadRequestException(
-          'Insufficient balance or concurrent transaction detected.',
-        );
+      } catch {
+        throw new BadRequestException('Insufficient balance or concurrent transaction detected.');
       }
 
-      // 3. Create Ledger Entry
       await tx.walletLedger.create({
         data: {
-          userId: userId,
+          userId,
           walletId: wallet.id,
           source: 'WITHDRAWAL',
           sourceId: withdrawal.id,
           debit: dto.amount,
           balanceAfter: updatedWallet.withdrawableBalance,
-          description: `Withdrawal Request to UPI: ${dto.upiId}`,
+          description: `Withdrawal request ₹${dto.amount} via ${kyc.upiId ? 'UPI: ' + kyc.upiId : 'Bank: ' + kyc.bankAccount?.slice(-4)}`,
         },
       });
 
-      // 4. Audit Log
       await tx.auditLog.create({
         data: {
           actorId: userId,
           action: 'WITHDRAWAL_REQUESTED',
           entityType: 'WithdrawalRequest',
           entityId: withdrawal.id,
-          newValue: { amount: dto.amount, upi: dto.upiId },
+          oldValue: { balance: wallet.withdrawableBalance },
+          newValue: {
+            amount: dto.amount,
+            tdsDeducted,
+            platformFeeDeducted,
+            netPayable,
+            upiId: kyc.upiId,
+            bankAccount: kyc.bankAccount?.slice(-4),
+          },
         },
       });
 
-      return withdrawal;
+      return { ...withdrawal, kyc: { upiId: kyc.upiId, bankAccount: kyc.bankAccount?.slice(-4) } };
     });
   }
 

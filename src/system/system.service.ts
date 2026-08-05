@@ -26,8 +26,9 @@ export class SystemService {
   }
 
   async getPublicConfigs() {
-    const PUBLIC_KEYS = [
+   const PUBLIC_KEYS = [
       'VIEW_RATE_PER_1000',
+      'MIN_WATCH_DURATION_MS',
       'MIN_WITHDRAWAL_INR',
       'GIFT_CREATOR_SHARE_PERCENT',
       'GIFT_COIN_TO_INR_RATE',
@@ -85,7 +86,8 @@ export class SystemService {
     }
 
     return {
-      viewRatePer1000: configMap['VIEW_RATE_PER_1000'],
+ viewRatePer1000: configMap['VIEW_RATE_PER_1000'],
+      minWatchDurationMs: configMap['MIN_WATCH_DURATION_MS'],
       minWithdrawalInr: configMap['MIN_WITHDRAWAL_INR'],
       giftCreatorSharePercent: configMap['GIFT_CREATOR_SHARE_PERCENT'],
       giftCoinToInrRate: configMap['GIFT_COIN_TO_INR_RATE'],

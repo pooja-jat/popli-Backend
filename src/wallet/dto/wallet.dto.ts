@@ -1,4 +1,4 @@
-import { IsNumber, IsString, IsNotEmpty, IsOptional } from 'class-validator';
+import { IsNumber, IsString, IsNotEmpty, IsOptional, Min } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class RechargeDto {
@@ -24,12 +24,13 @@ export class RechargeDto {
 export class WithdrawDto {
   @ApiProperty()
   @IsNumber()
+  @Min(1)
   amount: number = 0;
 
-  @ApiProperty()
+  @ApiProperty({ required: false })
   @IsString()
-  @IsNotEmpty()
-  upiId: string = '';
+  @IsOptional()
+  upiId?: string;
 }
 
 export class CreateOrderDto {
