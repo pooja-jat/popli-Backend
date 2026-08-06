@@ -1,14 +1,24 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
-import { v2 as cloudinary, UploadApiResponse } from 'cloudinary';
-import { Readable } from 'stream';
+import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
 export class UploadService {
+  private s3: S3Client;
+  private bucket: string;
+  private publicUrl: string;
+
   constructor() {
-    cloudinary.config({
-      cloud_name: process.env.CLOUDINARY_CLOUD_NAME!,
-      api_key: process.env.CLOUDINARY_API_KEY!,
-      api_secret: process.env.CLOUDINARY_API_SECRET!,
+    this.bucket = process.env.R2_BUCKET_NAME!;
+    this.publicUrl = process.env.R2_PUBLIC_URL!.replace(/\/$/, '');
+
+    this.s3 = new S3Client({
+      region: 'auto',
+      endpoint: process.env.R2_ENDPOINT!,
+      credentials: {
+        accessKeyId: process.env.R2_ACCESS_KEY_ID!,
+        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
+      },
     });
   }
 
@@ -21,6 +31,17 @@ export class UploadService {
     }
   }
 
+  private getExtension(mimetype: string): string {
+    const map: Record<string, string> = {
+      'image/jpeg': 'jpg',
+      'image/jpg': 'jpg',
+      'image/png': 'png',
+      'image/webp': 'webp',
+      'image/gif': 'gif',
+    };
+    return map[mimetype] || 'jpg';
+  }
+
   async uploadImage(
     buffer: Buffer,
     mimetype: string,
@@ -28,37 +49,34 @@ export class UploadService {
   ): Promise<{ secureUrl: string; publicId: string }> {
     this.validateImageMime(mimetype);
 
-    return new Promise((resolve, reject) => {
-      const stream = cloudinary.uploader.upload_stream(
-        {
-          folder: `popli/${folder}`,
-          resource_type: 'image',
-          transformation: [{ quality: 'auto', fetch_format: 'auto' }],
-        },
-        (error, result: UploadApiResponse | undefined) => {
-          if (error || !result) {
-            reject(error || new Error('Cloudinary upload failed'));
-            return;
-          }
-          resolve({
-            secureUrl: result.secure_url,
-            publicId: result.public_id,
-          });
-        },
-      );
+    const ext = this.getExtension(mimetype);
+    const key = `popli/${folder}/${uuidv4()}.${ext}`;
 
-      const readable = new Readable();
-      readable.push(buffer);
-      readable.push(null);
-      readable.pipe(stream);
-    });
+    await this.s3.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        Body: buffer,
+        ContentType: mimetype,
+      }),
+    );
+
+    return {
+      secureUrl: `${this.publicUrl}/${key}`,
+      publicId: key,
+    };
   }
 
   async deleteImage(publicId: string): Promise<void> {
     try {
-      await cloudinary.uploader.destroy(publicId, { resource_type: 'image' });
+      await this.s3.send(
+        new DeleteObjectCommand({
+          Bucket: this.bucket,
+          Key: publicId,
+        }),
+      );
     } catch (error) {
-      console.warn(`Failed to delete Cloudinary image: ${publicId}`, error);
+      console.warn(`Failed to delete R2 image: ${publicId}`, error);
     }
   }
 }

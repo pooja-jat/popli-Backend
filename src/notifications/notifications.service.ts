@@ -200,11 +200,20 @@ async markAllAsRead(userId: string) {
 async createAndPush(data: any, title: string, body: string) {
     const notif = await this.prisma.notification.create({ data }).catch(() => null);
     if (notif) {
-      await this.sendPushNotification(data.userId, title, body).catch(() => {});
-      // Socket emit — lazy import to avoid circular dependency
+      const fcmData: Record<string, string> = {
+        type: String(data.type ?? ''),
+        notificationId: String(notif.id),
+      };
+      if (data.postId) fcmData.reelId = String(data.postId);
+      if (data.senderId) fcmData.senderId = String(data.senderId);
+      if (data.commentId) fcmData.commentId = String(data.commentId);
+      const meta = (data.metaData as any) || {};
+      if (meta.targetId) fcmData.targetId = String(meta.targetId);
+      if (meta.challengeId) fcmData.targetId = String(meta.challengeId);
+      if (meta.storyId) fcmData.targetId = String(meta.storyId);
+
+      await this.sendPushNotification(data.userId, title, body, fcmData).catch(() => {});
       try {
-        const { NotificationsGateway } = await import('./notifications.gateway');
-        // Gateway is already instantiated via DI — use the service reference
         if (this.gateway) {
           await this.gateway.sendNotificationToUser(data.userId, notif);
         }
@@ -222,15 +231,37 @@ async sendPushNotification(userId: string, title: string, body: string, extraDat
 
       if (!user?.deviceToken || !admin.apps.length) return;
 
- await admin.messaging().send({
+      await admin.messaging().send({
         token: user.deviceToken,
         notification: { title, body },
         data: extraData,
-        android: { priority: 'high' },
-        apns: { payload: { aps: { sound: 'default' } } },
+        android: {
+          priority: 'high',
+          notification: {
+            channelId: 'default',
+            sound: 'default',
+            priority: 'high',
+            defaultSound: true,
+          },
+        },
+        apns: {
+          payload: { aps: { sound: 'default', badge: 1 } },
+          headers: { 'apns-priority': '10' },
+        },
       });
-    } catch (error) {
-      console.error('FCM send failed:', error);
+    } catch (error: any) {
+      const invalidTokenCodes = [
+        'messaging/registration-token-not-registered',
+        'messaging/invalid-registration-token',
+      ];
+      if (invalidTokenCodes.includes(error?.code)) {
+        await this.prisma.user.update({
+          where: { id: userId },
+          data: { deviceToken: null },
+        });
+      } else {
+        console.error('FCM send failed:', error);
+      }
     }
   }
 }

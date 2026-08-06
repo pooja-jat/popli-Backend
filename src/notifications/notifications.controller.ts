@@ -5,19 +5,35 @@ import {
   Patch,
   Param,
   Query,
+  Body,
   UseGuards,
   Req,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { NotificationsService } from './notifications.service';
+import { PrismaService } from '../prisma/prisma.service';
 
 @ApiTags('notifications')
 @Controller('notifications')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class NotificationsController {
-  constructor(private readonly notificationsService: NotificationsService) {}
+constructor(
+    private readonly notificationsService: NotificationsService,
+    private readonly prisma: PrismaService,
+  ) {}
+
+  @Post('register-token')
+  @ApiOperation({ summary: 'Register or update FCM device token' })
+  async registerToken(@Req() req: any, @Body() body: { token: string }) {
+    if (!body?.token) return { success: false };
+    await this.prisma.user.update({
+      where: { id: req.user.id },
+      data: { deviceToken: body.token },
+    });
+    return { success: true };
+  }
 
   @Get()
   @ApiOperation({ summary: 'Get user notifications' })

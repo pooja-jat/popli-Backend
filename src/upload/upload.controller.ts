@@ -20,7 +20,7 @@ export class UploadController {
   constructor(private readonly uploadService: UploadService) {}
 
   @Post('image')
-  @ApiOperation({ summary: 'Upload image to Cloudinary' })
+@ApiOperation({ summary: 'Upload image to R2' })
   @ApiConsumes('multipart/form-data')
   @ApiQuery({ name: 'folder', required: false })
   @ApiBody({
