@@ -8,17 +8,25 @@ export class KafkaProducerService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(KafkaProducerService.name);
  private producer!: Producer;
 
-  onModuleInit() {
-    const caPath = path.resolve(process.cwd(), process.env.KAFKA_CA_PATH || './ca.pem');
-    const ssl = fs.existsSync(caPath)
-      ? { ca: [fs.readFileSync(caPath, 'utf-8')] }
-      : true;
-
+onModuleInit() {
+const caPath = path.resolve(process.cwd(), process.env.KAFKA_CA_PATH || './ca.pem');
+    let ssl: any = { rejectUnauthorized: false };
+    if (process.env.KAFKA_CA_CERT) {
+      ssl = {
+        rejectUnauthorized: true,
+        ca: [process.env.KAFKA_CA_CERT.replace(/\\n/g, '\n')],
+      };
+    } else if (fs.existsSync(caPath)) {
+      ssl = {
+        rejectUnauthorized: true,
+        ca: [fs.readFileSync(caPath, 'utf-8')],
+      };
+    }
     const kafka = new Kafka({
       clientId: 'popli-backend',
       brokers: [process.env.KAFKA_BROKER!],
       ssl,
-      sasl: { 
+      sasl: {
         mechanism: 'plain',
         username: process.env.KAFKA_USERNAME!,
         password: process.env.KAFKA_PASSWORD!,

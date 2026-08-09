@@ -20,10 +20,19 @@ export class KafkaConsumerService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit() {
-    const caPath = path.resolve(process.cwd(), process.env.KAFKA_CA_PATH || './ca.pem');
-    const ssl = fs.existsSync(caPath)
-      ? { ca: [fs.readFileSync(caPath, 'utf-8')] }
-      : true;
+const caPath = path.resolve(process.cwd(), process.env.KAFKA_CA_PATH || './ca.pem');
+    let ssl: any = { rejectUnauthorized: false };
+    if (process.env.KAFKA_CA_CERT) {
+      ssl = {
+        rejectUnauthorized: true,
+        ca: [process.env.KAFKA_CA_CERT.replace(/\\n/g, '\n')],
+      };
+    } else if (fs.existsSync(caPath)) {
+      ssl = {
+        rejectUnauthorized: true,
+        ca: [fs.readFileSync(caPath, 'utf-8')],
+      };
+    }
 
     const kafka = new Kafka({
       clientId: 'popli-consumer',
