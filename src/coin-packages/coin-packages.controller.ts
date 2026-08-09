@@ -2,6 +2,8 @@ import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, Req } fro
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { CoinPackagesService } from './coin-packages.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 
 @ApiTags('coin-packages')
 @Controller('coin-packages')
@@ -14,8 +16,9 @@ export class CoinPackagesController {
     return this.coinPackagesService.findAllPublic();
   }
 
-  @Get('admin')
-  @UseGuards(JwtAuthGuard)
+@Get('admin')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get all coin packages including inactive (admin)' })
   getAll() {
@@ -23,7 +26,8 @@ export class CoinPackagesController {
   }
 
   @Post('admin')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Create coin package' })
   create(@Body() body: any) {
@@ -31,7 +35,8 @@ export class CoinPackagesController {
   }
 
   @Patch('admin/:id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update coin package' })
   update(@Param('id') id: string, @Body() body: any) {
@@ -39,7 +44,8 @@ export class CoinPackagesController {
   }
 
   @Delete('admin/:id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete coin package' })
   remove(@Param('id') id: string) {

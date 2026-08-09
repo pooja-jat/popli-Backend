@@ -948,7 +948,9 @@ enum NotificationType {
   WITHDRAWAL_APPROVED       @map("withdrawal_approved")
   WITHDRAWAL_REJECTED       @map("withdrawal_rejected")
   WITHDRAWAL_PROCESSING     @map("withdrawal_processing")
-  WITHDRAWAL_FAILED         @map("withdrawal_failed")
+WITHDRAWAL_FAILED         @map("withdrawal_failed")
+  COIN_REFUND_INITIATED     @map("coin_refund_initiated")
+  COIN_REFUND_COMPLETED     @map("coin_refund_completed")
 }
 enum ChallengeRewardStatus {
   PENDING
@@ -982,8 +984,34 @@ enum PaymentStatus {
   FAILED
   CANCELLED
   REFUNDED
+  PARTIALLY_REFUNDED
 }
 
+enum CoinRefundStatus {
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model CoinRefund {
+  id                String          @id @default(uuid())
+  paymentRecordId   String
+  userId            String
+  razorpayRefundId  String?         @unique
+  amount            Int
+  coinsDeducted     Int
+  reason            String
+  status            CoinRefundStatus @default(PROCESSING)
+  requestedById     String
+  gatewayResponse   Json?
+  processedAt       DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  paymentRecord     PaymentRecord   @relation(fields: [paymentRecordId], references: [id])
+
+  @@index([userId])
+  @@index([paymentRecordId])
+}
 model PaymentRecord {
   id                String        @id @default(uuid())
   userId            String
@@ -999,6 +1027,7 @@ model PaymentRecord {
   verifiedAt        DateTime?
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
+  refunds           CoinRefund[]
 
   @@index([userId])
   @@index([razorpayOrderId])

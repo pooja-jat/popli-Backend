@@ -539,14 +539,14 @@ async createRazorpayOrder(userId: string, packageId: string) {
       });
 
       const openingCoins = wallet.coinBalance - paymentRecord.coinsToCredit;
-      await tx.walletLedger.create({
+await tx.walletLedger.create({
         data: {
           userId,
           walletId: wallet.id,
           source: 'COIN_PURCHASE',
           sourceId: dto.razorpayPaymentId,
-          credit: paymentRecord.amount,
-          balanceAfter: wallet.withdrawableBalance,
+          credit: paymentRecord.coinsToCredit,
+          balanceAfter: wallet.coinBalance,
           description: `${paymentRecord.coinsToCredit} coins credited. Opening: ${openingCoins}, Closing: ${wallet.coinBalance}. Ref: ${dto.razorpayPaymentId}`,
         },
       });
@@ -646,16 +646,76 @@ async createRazorpayOrder(userId: string, packageId: string) {
       this.logger.log(`Webhook payment.failed | order: ${payment.order_id}`);
     }
 
+if (event.event === 'refund.created') {
+      const r = event.payload?.refund?.entity;
+      if (!r?.id || !r?.payment_id) return { received: true };
+
+      const existing = await this.prisma.coinRefund.findFirst({ where: { razorpayRefundId: r.id } });
+      if (!existing) {
+        const paymentRecord = await this.prisma.paymentRecord.findFirst({ where: { razorpayPaymentId: r.payment_id } });
+        if (paymentRecord) {
+          const processingRecord = await this.prisma.coinRefund.findFirst({
+            where: { paymentRecordId: paymentRecord.id, status: 'PROCESSING', razorpayRefundId: null },
+          });
+          if (processingRecord) {
+            await this.prisma.coinRefund.update({
+              where: { id: processingRecord.id },
+              data: { razorpayRefundId: r.id, gatewayResponse: r },
+            });
+          }
+        }
+      }
+      this.logger.log(`Webhook refund.created | refund: ${r.id}`);
+    }
+
     if (event.event === 'refund.processed') {
-      const refund = event.payload?.refund?.entity;
-      if (!refund?.payment_id) return { received: true };
+      const r = event.payload?.refund?.entity;
+      if (!r?.id) return { received: true };
 
-      await this.prisma.paymentRecord.updateMany({
-        where: { razorpayPaymentId: refund.payment_id },
-        data: { status: 'REFUNDED' },
-      });
+      const refundRecord = await this.prisma.coinRefund.findFirst({ where: { razorpayRefundId: r.id } });
 
-      this.logger.log(`Webhook refund.processed | payment: ${refund.payment_id}`);
+      if (refundRecord && refundRecord.status !== 'COMPLETED') {
+        const paymentRecord = await this.prisma.paymentRecord.findUnique({
+          where: { id: refundRecord.paymentRecordId },
+          include: { refunds: { where: { status: 'COMPLETED', id: { not: refundRecord.id } } } },
+        });
+
+        if (paymentRecord) {
+          const totalRefunded = paymentRecord.refunds.reduce((s, r) => s + r.amount, 0) + refundRecord.amount;
+          const isFullyRefunded = totalRefunded >= paymentRecord.amount;
+
+          await this.prisma.$transaction(async (tx) => {
+            await tx.coinRefund.update({
+              where: { id: refundRecord.id },
+              data: { status: 'COMPLETED', processedAt: new Date(), gatewayResponse: r },
+            });
+
+            await tx.paymentRecord.update({
+              where: { id: paymentRecord.id },
+              data: { status: isFullyRefunded ? 'REFUNDED' : 'PARTIALLY_REFUNDED' },
+            });
+          });
+
+          this.notificationsService.createAndPush(
+            {
+              userId: refundRecord.userId,
+              type: 'COIN_REFUND_COMPLETED',
+              title: 'Refund Completed',
+              body: `₹${refundRecord.amount} has been credited to your original payment method.`,
+              metaData: { refundId: refundRecord.id, razorpayRefundId: r.id },
+            },
+            'Refund Completed',
+            `₹${refundRecord.amount} has been credited to your original payment method.`,
+          ).catch(() => {});
+        }
+      } else {
+        await this.prisma.paymentRecord.updateMany({
+          where: { razorpayPaymentId: r.payment_id },
+          data: { status: 'REFUNDED' },
+        });
+      }
+
+      this.logger.log(`Webhook refund.processed | refund: ${r.id}`);
     }
 
     return { received: true };
@@ -669,39 +729,7 @@ async createRazorpayOrder(userId: string, packageId: string) {
     });
   }
 
-  async rechargeCoins(userId: string, dto: RechargeDto) {
-    return this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      const wallet = await tx.wallet.findUnique({ where: { userId } });
-      if (!wallet) throw new BadRequestException('Wallet not found');
 
-      let coinsToCredit = dto.coins;
-      let amountPaid = dto.amount;
-
-      if (dto.packageId) {
-        const pkg = await tx.coinPackage.findUnique({ where: { id: dto.packageId } });
-        if (!pkg || !pkg.isActive) throw new BadRequestException('Invalid or unavailable coin package');
-        coinsToCredit = pkg.coins + pkg.bonusCoins;
-        amountPaid = pkg.priceInr;
-      }
-
-      await tx.transaction.create({
-        data: {
-          walletId: wallet.id,
-          type: 'COIN_RECHARGE',
-          amount: amountPaid,
-          coinsCredited: coinsToCredit,
-          currency: 'INR',
-          status: 'SUCCESS',
-          referenceId: dto.paymentReference,
-        },
-      });
-
-      return tx.wallet.update({
-        where: { id: wallet.id },
-        data: { coinBalance: { increment: coinsToCredit } },
-      });
-    });
-  }
   async promotePendingToWithdrawable() {
     this.logger.log(
       'Starting promotion of pending balances to withdrawable...',

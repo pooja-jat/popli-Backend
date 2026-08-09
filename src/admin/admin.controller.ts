@@ -346,12 +346,32 @@ export class AdminController {
     return this.adminService.getFraudStats(req.user.id);
   }
 
-  @Get('monetization-summary')
+@Get('monetization-summary')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get monetization summary: top earners, pending withdrawals, totals' })
   getMonetizationSummary(@Req() req: any) {
     return this.adminService.getMonetizationSummary(req.user.id);
+  }
+
+  @Get('payment-records')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get all successful coin purchase payment records' })
+  getPaymentRecords(@Req() req: any) {
+    return this.adminService.getPaymentRecords(req.user.id);
+  }
+
+  @Post('payment-records/:id/refund')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Execute a coin purchase refund via Razorpay' })
+  executeCoinRefund(
+    @Param('id') paymentRecordId: string,
+    @Body() body: { refundType: 'FULL' | 'PARTIAL'; amount?: number; reason: string },
+    @Req() req: any,
+  ) {
+    return this.adminService.executeCoinRefund(paymentRecordId, body, req.user.id);
   }
   @Post('users/:id/unban')
   @UseGuards(JwtAuthGuard)

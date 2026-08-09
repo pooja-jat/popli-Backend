@@ -26,7 +26,18 @@ async function bootstrap() {
   app.use(helmet());
  app.use('/wallet/recharge/webhook', require('express').raw({ type: 'application/json' }));
   app.use('/admin/withdrawals/payout-webhook', require('express').raw({ type: 'application/json' }));
-  app.enableCors();
+app.enableCors({
+    origin: [
+      'https://popli-admin.onrender.com',
+      'http://localhost:8081',
+      'http://localhost:3000',
+      'http://localhost:5173',
+      'https://popli-app.onrender.com'
+    ],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Bypass-Tunnel-Reminder'],
+    credentials: true,
+  });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   app.useGlobalFilters(new HttpExceptionFilter());
 

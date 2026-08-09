@@ -123,7 +123,7 @@ async getMonetizationSummary(adminId: string) {
           },
         },
       }),
-      this.prisma.withdrawalRequest.findMany({
+this.prisma.withdrawalRequest.findMany({
         where: { status: 'PENDING' },
         orderBy: { createdAt: 'desc' },
         include: {
@@ -133,7 +133,7 @@ async getMonetizationSummary(adminId: string) {
                 select: {
                   name: true,
                   username: true,
-                  kycRecord: { select: { upiId: true } },
+                  kycRecord: { select: { upiId: true, bankAccount: true } },
                 },
               },
             },
@@ -1126,6 +1126,187 @@ async getEarningSettings(adminId: string) {
     });
 
     return { success: true, updated: data };
+  }
+
+async getPaymentRecords(adminId: string) {
+    const admin = await this.prisma.user.findUnique({ where: { id: adminId } });
+    const partner = !admin ? await this.prisma.adminPartner.findUnique({ where: { id: adminId } }) : null;
+    if (!admin && !partner) throw new UnauthorizedException('Not authorized');
+
+    return this.prisma.paymentRecord.findMany({
+      where: { status: { in: ['SUCCESS', 'REFUNDED', 'PARTIALLY_REFUNDED'] } },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+      include: {
+        refunds: { orderBy: { createdAt: 'desc' } },
+      },
+    });
+  }
+
+  async executeCoinRefund(
+    paymentRecordId: string,
+    data: { refundType: 'FULL' | 'PARTIAL'; amount?: number; reason: string },
+    adminId: string,
+  ) {
+    const admin = await this.prisma.user.findUnique({ where: { id: adminId } });
+    const partner = !admin ? await this.prisma.adminPartner.findUnique({ where: { id: adminId } }) : null;
+    if (!admin && !partner) throw new UnauthorizedException('Not authorized');
+
+    if (!data.reason?.trim()) throw new BadRequestException('Refund reason is required.');
+    if (!['FULL', 'PARTIAL'].includes(data.refundType)) throw new BadRequestException('refundType must be FULL or PARTIAL.');
+
+    const paymentRecord = await this.prisma.paymentRecord.findUnique({
+      where: { id: paymentRecordId },
+      include: {
+        refunds: { where: { status: { in: ['PROCESSING', 'COMPLETED'] } } },
+      },
+    });
+
+    if (!paymentRecord) throw new BadRequestException('Payment record not found.');
+    if (!paymentRecord.razorpayPaymentId) throw new BadRequestException('No Razorpay payment ID. Cannot process refund.');
+    if (!['SUCCESS', 'PARTIALLY_REFUNDED'].includes(paymentRecord.status)) {
+      throw new BadRequestException(`Cannot refund a payment with status: ${paymentRecord.status}`);
+    }
+
+    const pendingRefund = paymentRecord.refunds.find(r => r.status === 'PROCESSING');
+    if (pendingRefund) throw new BadRequestException('A refund is already processing for this payment.');
+
+    const totalAlreadyRefunded = paymentRecord.refunds
+      .filter(r => r.status === 'COMPLETED')
+      .reduce((s, r) => s + r.amount, 0);
+
+    const remainingRefundable = paymentRecord.amount - totalAlreadyRefunded;
+    if (remainingRefundable <= 0) throw new BadRequestException('This payment has already been fully refunded.');
+
+    const refundAmount = data.refundType === 'FULL'
+      ? remainingRefundable
+      : Math.round(Number(data.amount));
+
+    if (!refundAmount || refundAmount <= 0) throw new BadRequestException('Invalid refund amount.');
+    if (refundAmount > remainingRefundable) {
+      throw new BadRequestException(`Refund amount ₹${refundAmount} exceeds remaining refundable ₹${remainingRefundable}.`);
+    }
+
+    const coinsToDeduct = Math.round((refundAmount / paymentRecord.amount) * paymentRecord.coinsToCredit);
+
+    const refundRecord = await this.prisma.coinRefund.create({
+      data: {
+        paymentRecordId,
+        userId: paymentRecord.userId,
+        amount: refundAmount,
+        coinsDeducted: coinsToDeduct,
+        reason: data.reason.trim(),
+        status: 'PROCESSING',
+        requestedById: adminId,
+      },
+    });
+
+    const Razorpay = require('razorpay');
+    const razorpay = new Razorpay({
+      key_id: process.env.RAZORPAY_KEY_ID!,
+      key_secret: process.env.RAZORPAY_KEY_SECRET!,
+    });
+
+    try {
+      const rzpRefund = await razorpay.payments.refund(paymentRecord.razorpayPaymentId, {
+        amount: refundAmount * 100,
+        speed: 'normal',
+        notes: {
+          reason: data.reason.trim(),
+          refundId: refundRecord.id,
+          adminId,
+          refundType: data.refundType,
+        },
+      });
+
+      const gatewayRefundId = rzpRefund.id;
+      const refundStatus = rzpRefund.status === 'processed' ? 'COMPLETED' : 'PROCESSING';
+      const totalRefunded = totalAlreadyRefunded + refundAmount;
+      const isFullyRefunded = totalRefunded >= paymentRecord.amount;
+
+      await this.prisma.$transaction(async (tx) => {
+        await tx.coinRefund.update({
+          where: { id: refundRecord.id },
+          data: {
+            status: refundStatus,
+            razorpayRefundId: gatewayRefundId,
+            gatewayResponse: JSON.parse(JSON.stringify(rzpRefund)),
+            processedAt: refundStatus === 'COMPLETED' ? new Date() : undefined,
+          },
+        });
+
+        await tx.paymentRecord.update({
+          where: { id: paymentRecordId },
+          data: { status: isFullyRefunded ? 'REFUNDED' : 'PARTIALLY_REFUNDED' },
+        });
+
+        const wallet = await tx.wallet.findUnique({ where: { userId: paymentRecord.userId } });
+        if (wallet && wallet.coinBalance >= coinsToDeduct) {
+          await tx.wallet.update({
+            where: { userId: paymentRecord.userId },
+            data: { coinBalance: { decrement: coinsToDeduct } },
+          });
+
+          await tx.walletLedger.create({
+            data: {
+              userId: paymentRecord.userId,
+              walletId: wallet.id,
+              source: 'ADJUSTMENT',
+              sourceId: refundRecord.id,
+              debit: coinsToDeduct,
+              balanceAfter: wallet.coinBalance - coinsToDeduct,
+              description: `${coinsToDeduct} coins deducted due to refund of ₹${refundAmount}. Ref: ${gatewayRefundId}`,
+            },
+          });
+        }
+
+        await tx.auditLog.create({
+          data: {
+            actorId: adminId,
+            action: 'COIN_REFUND_EXECUTED',
+            entityType: 'CoinRefund',
+            entityId: refundRecord.id,
+            newValue: {
+              paymentRecordId,
+              refundAmount,
+              coinsDeducted: coinsToDeduct,
+              razorpayRefundId: gatewayRefundId,
+              reason: data.reason.trim(),
+            },
+          },
+        });
+      });
+
+      await this.prisma.notification.create({
+        data: {
+          userId: paymentRecord.userId,
+          type: 'COIN_REFUND_INITIATED',
+          title: refundStatus === 'COMPLETED' ? 'Refund Processed' : 'Refund Initiated',
+          body: `₹${refundAmount} refund for your coin purchase has been ${refundStatus === 'COMPLETED' ? 'processed' : 'initiated'}. ${coinsToDeduct} coins have been deducted from your wallet. Amount will be credited within 5-7 business days.`,
+          metaData: { refundId: refundRecord.id, razorpayRefundId: gatewayRefundId, amount: refundAmount },
+        },
+      }).catch(() => {});
+
+      return {
+        success: true,
+        razorpayRefundId: gatewayRefundId,
+        status: refundStatus,
+        refundAmount,
+        coinsDeducted: coinsToDeduct,
+        remainingRefundable: remainingRefundable - refundAmount,
+        message: refundStatus === 'COMPLETED' ? 'Refund processed successfully.' : 'Refund initiated. Amount will be credited within 5-7 business days.',
+      };
+    } catch (gatewayErr: any) {
+      await this.prisma.coinRefund.update({
+        where: { id: refundRecord.id },
+        data: {
+          status: 'FAILED',
+          gatewayResponse: { error: gatewayErr.error || gatewayErr.message },
+        },
+      });
+      const errMsg = gatewayErr.error?.description || gatewayErr.message || 'Gateway refund failed.';
+      throw new BadRequestException(`Razorpay refund failed: ${errMsg}`);
+    }
   }
 
   async deleteCoinPackage(packageId: string, adminId: string) {

@@ -492,3 +492,43 @@
 {"timestamp":"2026-08-05T05:01:33.125Z","status":401,"res":{"message":"Invalid admin credentials","error":"Unauthorized","statusCode":401}}
 {"timestamp":"2026-08-05T05:01:41.845Z","status":401,"res":{"message":"Invalid password","error":"Unauthorized","statusCode":401}}
 {"timestamp":"2026-08-05T05:33:25.281Z","status":401,"res":{"success":false,"code":"INVALID_TOKEN","message":"Authentication token is invalid or expired."}}
+{"timestamp":"2026-08-09T15:17:04.429Z","status":401,"res":{"success":false,"code":"INVALID_TOKEN","message":"Authentication token is invalid or expired."}}
+{"timestamp":"2026-08-09T15:17:04.435Z","status":401,"res":{"success":false,"code":"INVALID_TOKEN","message":"Authentication token is invalid or expired."}}
+{"timestamp":"2026-08-09T15:17:04.438Z","status":401,"res":{"success":false,"code":"INVALID_TOKEN","message":"Authentication token is invalid or expired."}}
+{"timestamp":"2026-08-09T15:17:04.440Z","status":401,"res":{"success":false,"code":"INVALID_TOKEN","message":"Authentication token is invalid or expired."}}
+{"timestamp":"2026-08-09T15:17:04.443Z","status":401,"res":{"success":false,"code":"INVALID_TOKEN","message":"Authentication token is invalid or expired."}}
+{"timestamp":"2026-08-09T15:17:04.446Z","status":401,"res":{"success":false,"code":"INVALID_TOKEN","message":"Authentication token is invalid or expired."}}
+{"timestamp":"2026-08-09T15:17:04.449Z","status":401,"res":{"success":false,"code":"INVALID_TOKEN","message":"Authentication token is invalid or expired."}}
+{"timestamp":"2026-08-09T15:17:04.451Z","status":401,"res":{"success":false,"code":"INVALID_TOKEN","message":"Authentication token is invalid or expired."}}
+{"timestamp":"2026-08-09T15:17:04.456Z","status":401,"res":{"success":false,"code":"INVALID_TOKEN","message":"Authentication token is invalid or expired."}}
+{"timestamp":"2026-08-09T15:17:04.458Z","status":401,"res":{"success":false,"code":"INVALID_TOKEN","message":"Authentication token is invalid or expired."}}
+{"timestamp":"2026-08-09T15:17:04.460Z","status":401,"res":{"success":false,"code":"INVALID_TOKEN","message":"Authentication token is invalid or expired."}}
+{"timestamp":"2026-08-09T15:17:04.463Z","status":401,"res":{"success":false,"code":"INVALID_TOKEN","message":"Authentication token is invalid or expired."}}
+{"timestamp":"2026-08-09T15:17:04.466Z","status":401,"res":{"success":false,"code":"INVALID_TOKEN","message":"Authentication token is invalid or expired."}}
+{"timestamp":"2026-08-09T15:17:04.468Z","status":401,"res":{"success":false,"code":"INVALID_TOKEN","message":"Authentication token is invalid or expired."}}
+{"timestamp":"2026-08-09T15:17:04.470Z","status":401,"res":{"success":false,"code":"INVALID_TOKEN","message":"Authentication token is invalid or expired."}}
+{"timestamp":"2026-08-09T15:17:04.473Z","status":401,"res":{"success":false,"code":"INVALID_TOKEN","message":"Authentication token is invalid or expired."}}
+{"timestamp":"2026-08-09T15:17:04.475Z","status":401,"res":{"success":false,"code":"INVALID_TOKEN","message":"Authentication token is invalid or expired."}}
+{"timestamp":"2026-08-09T15:17:04.476Z","status":401,"res":{"success":false,"code":"INVALID_TOKEN","message":"Authentication token is invalid or expired."}}
+{"timestamp":"2026-08-09T15:17:04.479Z","status":401,"res":{"success":false,"code":"INVALID_TOKEN","message":"Authentication token is invalid or expired."}}
+{"timestamp":"2026-08-09T15:17:04.514Z","status":401,"res":{"success":false,"code":"INVALID_TOKEN","message":"Authentication token is invalid or expired."}}
+{"timestamp":"2026-08-09T15:17:04.562Z","status":401,"res":{"success":false,"code":"INVALID_TOKEN","message":"Authentication token is invalid or expired."}}
+{"timestamp":"2026-08-09T15:17:04.564Z","status":401,"res":{"success":false,"code":"INVALID_TOKEN","message":"Authentication token is invalid or expired."}}
+{"timestamp":"2026-08-09T15:17:04.565Z","status":401,"res":{"success":false,"code":"INVALID_TOKEN","message":"Authentication token is invalid or expired."}}
+{"timestamp":"2026-08-09T15:17:04.567Z","status":401,"res":{"success":false,"code":"INVALID_TOKEN","message":"Authentication token is invalid or expired."}}
+{"timestamp":"2026-08-09T15:17:04.567Z","status":401,"res":{"success":false,"code":"INVALID_TOKEN","message":"Authentication token is invalid or expired."}}
+{"timestamp":"2026-08-09T15:17:04.569Z","status":401,"res":{"success":false,"code":"INVALID_TOKEN","message":"Authentication token is invalid or expired."}}
+{"timestamp":"2026-08-09T15:17:04.570Z","status":401,"res":{"success":false,"code":"INVALID_TOKEN","message":"Authentication token is invalid or expired."}}
+{"timestamp":"2026-08-09T15:17:04.571Z","status":401,"res":{"success":false,"code":"INVALID_TOKEN","message":"Authentication token is invalid or expired."}}
+{"timestamp":"2026-08-09T15:17:04.572Z","status":401,"res":{"success":false,"code":"INVALID_TOKEN","message":"Authentication token is invalid or expired."}}
+{"timestamp":"2026-08-09T15:17:04.573Z","status":401,"res":{"success":false,"code":"INVALID_TOKEN","message":"Authentication token is invalid or expired."}}
+{"timestamp":"2026-08-09T15:17:04.574Z","status":401,"res":{"success":false,"code":"INVALID_TOKEN","message":"Authentication token is invalid or expired."}}
+{"timestamp":"2026-08-09T15:17:04.575Z","status":401,"res":{"success":false,"code":"INVALID_TOKEN","message":"Authentication token is invalid or expired."}}
+{"timestamp":"2026-08-09T15:17:04.578Z","status":401,"res":{"success":false,"code":"INVALID_TOKEN","message":"Authentication token is invalid or expired."}}
+{"timestamp":"2026-08-09T15:17:04.583Z","status":401,"res":{"success":false,"code":"INVALID_TOKEN","message":"Authentication token is invalid or expired."}}
+{"timestamp":"2026-08-09T15:17:07.527Z","status":401,"res":{"success":false,"code":"INVALID_TOKEN","message":"Authentication token is invalid or expired."}}
+{"timestamp":"2026-08-09T15:17:07.529Z","status":401,"res":{"success":false,"code":"INVALID_TOKEN","message":"Authentication token is invalid or expired."}}
+{"timestamp":"2026-08-09T15:17:07.531Z","status":401,"res":{"success":false,"code":"INVALID_TOKEN","message":"Authentication token is invalid or expired."}}
+{"timestamp":"2026-08-09T15:17:07.533Z","status":401,"res":{"success":false,"code":"INVALID_TOKEN","message":"Authentication token is invalid or expired."}}
+{"timestamp":"2026-08-09T15:17:25.032Z","status":401,"res":{"message":"Invalid admin credentials","error":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-08-09T16:16:09.288Z","status":400,"res":{"message":"Payment verification failed. Invalid signature.","error":"Bad Request","statusCode":400}}

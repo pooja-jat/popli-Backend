@@ -60,17 +60,5 @@ export class WalletController {
     return this.walletService.withdraw(req.user.id, dto);
   }
 
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
-  @Post('test/trigger-hourly-earnings')
-  triggerHourlyEarnings() {
-    return this.walletService.processViewEarnings();
-  }
 
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
-  @Post('test/promote-pending')
-  promotePending() {
-    return this.walletService.promotePendingToWithdrawable();
-  }
 }
