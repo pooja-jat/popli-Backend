@@ -1,114 +1,189 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import Mux from '@mux/mux-node';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class VideoService {
   private readonly logger = new Logger(VideoService.name);
-  private mux: Mux;
 
-  constructor(private prisma: PrismaService) {
-    this.mux = new Mux({
-      tokenId: process.env.MUX_TOKEN_ID!,
-      tokenSecret: process.env.MUX_TOKEN_SECRET!,
-    });
+  private readonly accountId = process.env.CLOUDFLARE_ACCOUNT_ID!;
+  private readonly apiToken = process.env.CLOUDFLARE_API_TOKEN!;
+  private readonly customerSubdomain = process.env.CLOUDFLARE_CUSTOMER_SUBDOMAIN!;
+  private readonly webhookSecret = process.env.CLOUDFLARE_WEBHOOK_SECRET!;
+
+  constructor(private prisma: PrismaService) {}
+
+  private get baseUrl() {
+    return `https://api.cloudflare.com/client/v4/accounts/${this.accountId}/stream`;
   }
 
-  async createDirectUpload(): Promise<{ uploadId: string; uploadUrl: string }> {
-    const upload = await this.mux.video.uploads.create({
-      cors_origin: '*',
-      new_asset_settings: {
-        playback_policy: ['public'],
-        mp4_support: 'none',
-      },
-    });
-
+  private get headers() {
     return {
-      uploadId: upload.id,
-      uploadUrl: upload.url,
+      Authorization: `Bearer ${this.apiToken}`,
+      'Content-Type': 'application/json',
     };
   }
 
-  async getAssetByUploadId(uploadId: string): Promise<{
+async uploadVideoBuffer(buffer: Buffer, mimeType: string): Promise<{
+    uploadId: string;
+    uploadUrl: string;
     status: string;
     assetId?: string;
     playbackId?: string;
+    mediaUrl?: string;
     thumbnailUrl?: string;
     duration?: number;
   }> {
-    const upload = await this.mux.video.uploads.retrieve(uploadId);
+    const formData = new FormData();
+    const blob = new Blob([new Uint8Array(buffer)], { type: mimeType });
+    formData.append('file', blob, 'video.mp4');
 
-    if (!upload.asset_id) {
-      return { status: 'waiting' };
+    const response = await fetch(`${this.baseUrl}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.apiToken}`,
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Cloudflare video upload failed: ${error}`);
     }
 
-    const asset = await this.mux.video.assets.retrieve(upload.asset_id);
+    const data = await response.json() as any;
+    const result = data.result;
 
-    if (asset.status !== 'ready') {
-      return { status: asset.status ?? 'preparing' };
-    }
-
-    const playbackId = asset.playback_ids?.[0]?.id;
-    const thumbnailUrl = playbackId
-      ? `https://image.mux.com/${playbackId}/thumbnail.jpg`
-      : undefined;
+    const uid = result.uid;
 
     return {
-      status: 'ready',
-      assetId: asset.id,
-      playbackId,
-      thumbnailUrl,
-      duration: asset.duration,
+      uploadId: uid,
+      uploadUrl: '',
+      status: result.status?.state ?? 'preparing',
+      assetId: uid,
     };
   }
 
-  async deleteAsset(muxAssetId: string): Promise<void> {
+  async createDirectUpload(): Promise<{ uploadId: string; uploadUrl: string }> {
+    const response = await fetch(`${this.baseUrl}/direct_upload`, {
+      method: 'POST',
+      headers: this.headers,
+      body: JSON.stringify({
+        maxDurationSeconds: 300,
+        requireSignedURLs: false,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Cloudflare direct upload creation failed: ${error}`);
+    }
+
+    const data = await response.json() as any;
+    const result = data.result;
+
+    return {
+      uploadId: result.uid,
+      uploadUrl: result.uploadURL,
+    };
+  }
+async getAssetByUploadId(uploadId: string): Promise<{
+    status: string;
+    assetId?: string;
+    playbackId?: string;
+    mediaUrl?: string;
+    thumbnailUrl?: string;
+    duration?: number;
+  }> {
+    const response = await fetch(`${this.baseUrl}/${uploadId}`, {
+      method: 'GET',
+      headers: this.headers,
+    });
+
+    if (!response.ok) {
+      return { status: 'waiting' };
+    }
+
+    const data = await response.json() as any;
+    const result = data.result;
+
+    if (!result || !result.readyToStream || result.status?.state !== 'ready') {
+      return { status: result?.status?.state ?? 'preparing' };
+    }
+
+    const uid = result.uid;
+    const playbackUrl = result.playback?.hls ?? `https://customer-${this.customerSubdomain}.cloudflarestream.com/${uid}/manifest/video.m3u8`;
+    const thumbnailUrl = result.thumbnail ?? `https://customer-${this.customerSubdomain}.cloudflarestream.com/${uid}/thumbnails/thumbnail.jpg`;
+
+    return {
+      status: 'ready',
+      assetId: uid,
+      playbackId: uid,
+      mediaUrl: playbackUrl,
+      thumbnailUrl,
+      duration: result.duration > 0 ? result.duration : undefined,
+    };
+  }
+  async deleteAsset(assetId: string): Promise<void> {
     try {
-      await this.mux.video.assets.delete(muxAssetId);
-      this.logger.log(`Deleted Mux asset: ${muxAssetId}`);
+      const response = await fetch(`${this.baseUrl}/${assetId}`, {
+        method: 'DELETE',
+        headers: this.headers,
+      });
+
+      if (!response.ok) {
+        this.logger.warn(`Failed to delete Cloudflare Stream asset ${assetId}: ${response.status}`);
+      } else {
+        this.logger.log(`Deleted Cloudflare Stream asset: ${assetId}`);
+      }
     } catch (err: any) {
-      this.logger.warn(`Failed to delete Mux asset ${muxAssetId}: ${err.message}`);
+      this.logger.warn(`Failed to delete Cloudflare Stream asset ${assetId}: ${err.message}`);
     }
   }
 
-  async handleWebhook(rawBody: Buffer, muxSignature: string): Promise<void> {
+async handleWebhook(rawBody: Buffer, signature: string): Promise<void> {
     let event: any;
-
     try {
-      event = this.mux.webhooks.unwrap(rawBody, muxSignature, process.env.MUX_WEBHOOK_SECRET!);
-    } catch (err) {
-      this.logger.error('Mux webhook signature verification failed');
-      throw err;
+      event = JSON.parse(rawBody.toString());
+    } catch {
+      throw new Error('Invalid webhook body');
     }
 
-    this.logger.log(`Mux webhook received: ${event.type}`);
+    if (this.webhookSecret && signature) {
+      const hmac = crypto.createHmac('sha256', this.webhookSecret);
+      hmac.update(rawBody);
+      const expectedSignature = hmac.digest('hex');
+      if (signature !== expectedSignature) {
+        this.logger.error('Cloudflare webhook signature verification failed');
+        throw new Error('Invalid webhook signature');
+      }
+    }
 
-    if (event.type === 'video.asset.ready') {
-      const assetId = event.data?.id as string;
-      const playbackId = event.data?.playback_ids?.[0]?.id as string | undefined;
-      const duration = event.data?.duration as number | undefined;
+    this.logger.log(`Cloudflare Stream webhook received for uid: ${event.uid}`);
 
-      if (!assetId || !playbackId) return;
+const uid = event.uid as string;
+    if (!uid) return;
 
-      const thumbnailUrl = `https://image.mux.com/${playbackId}/thumbnail.jpg`;
-      const playbackUrl = `https://stream.mux.com/${playbackId}.m3u8`;
+    if (event.readyToStream === true && event.status?.state === 'ready') {
+      const thumbnailUrl = `https://customer-${this.customerSubdomain}.cloudflarestream.com/${uid}/thumbnails/thumbnail.jpg`;
+      const playbackUrl = `https://customer-${this.customerSubdomain}.cloudflarestream.com/${uid}/manifest/video.m3u8`;
+      const duration = event.duration as number | undefined;
 
       await this.prisma.reel.updateMany({
-        where: { muxAssetId: assetId },
+        where: { muxAssetId: uid },
         data: {
           mediaUrl: playbackUrl,
           thumbnailUrl,
-          muxPlaybackId: playbackId,
+          muxPlaybackId: uid,
           durationSeconds: duration ? Math.round(duration) : undefined,
         },
       });
 
-      this.logger.log(`Updated reel for Mux asset: ${assetId}`);
+      this.logger.log(`Updated reel for Cloudflare Stream video: ${uid}`);
     }
 
-    if (event.type === 'video.asset.errored') {
-      const assetId = event.data?.id as string;
-      this.logger.error(`Mux asset errored: ${assetId}`);
+    if (event.status?.state === 'error') {
+      this.logger.error(`Cloudflare Stream video errored: ${uid} — ${event.status?.errorReasonCode}`);
     }
   }
 }

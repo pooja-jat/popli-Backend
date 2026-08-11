@@ -17,16 +17,16 @@ export class CreateReelDto {
   @ApiProperty()
   @IsString()
   @IsNotEmpty()
-  mediaUrl: string;
+mediaUrl!: string;
 
-  @ApiProperty()
+@ApiPropertyOptional()
   @IsString()
-  @IsNotEmpty()
-  thumbnailUrl: string;
+  @IsOptional()
+  thumbnailUrl?: string;
 
   @ApiProperty({ enum: MediaType })
   @IsEnum(MediaType)
-  mediaType: MediaType;
+  mediaType!: MediaType;
 
   @ApiPropertyOptional()
   @IsString()
@@ -129,7 +129,7 @@ export class AddCommentDto {
   @ApiProperty()
   @IsString()
   @IsNotEmpty()
-  text: string;
+text!: string;
 
   @ApiPropertyOptional()
   @IsString()

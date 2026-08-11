@@ -21,7 +21,7 @@ async function bootstrap() {
     });
   }
 
-  const app = await NestFactory.create(AppModule, { rawBody: true });
+const app = await NestFactory.create(AppModule, { rawBody: true });
 
   app.use(helmet());
  app.use('/wallet/recharge/webhook', require('express').raw({ type: 'application/json' }));

@@ -532,3 +532,13 @@
 {"timestamp":"2026-08-09T15:17:07.533Z","status":401,"res":{"success":false,"code":"INVALID_TOKEN","message":"Authentication token is invalid or expired."}}
 {"timestamp":"2026-08-09T15:17:25.032Z","status":401,"res":{"message":"Invalid admin credentials","error":"Unauthorized","statusCode":401}}
 {"timestamp":"2026-08-09T16:16:09.288Z","status":400,"res":{"message":"Payment verification failed. Invalid signature.","error":"Bad Request","statusCode":400}}
+{"timestamp":"2026-08-11T01:01:28.039Z","status":401,"res":{"success":false,"code":"INVALID_TOKEN","message":"Authentication token is invalid or expired."}}
+{"timestamp":"2026-08-11T01:01:28.074Z","status":401,"res":{"success":false,"code":"INVALID_TOKEN","message":"Authentication token is invalid or expired."}}
+{"timestamp":"2026-08-11T01:01:28.189Z","status":401,"res":{"message":"Invalid refresh token","error":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-08-11T01:01:28.204Z","status":401,"res":{"message":"Invalid refresh token","error":"Unauthorized","statusCode":401}}
+{"timestamp":"2026-08-11T01:13:47.661Z","status":401,"res":{"success":false,"code":"INVALID_TOKEN","message":"Authentication token is invalid or expired."}}
+{"timestamp":"2026-08-11T01:55:34.714Z","status":404,"res":{"message":"Cannot POST /video/upload","error":"Not Found","statusCode":404}}
+{"timestamp":"2026-08-11T01:57:36.527Z","status":404,"res":{"message":"Cannot POST /video/upload","error":"Not Found","statusCode":404}}
+{"timestamp":"2026-08-11T01:57:55.457Z","status":404,"res":{"message":"Cannot POST /video/upload","error":"Not Found","statusCode":404}}
+{"timestamp":"2026-08-11T01:58:26.832Z","status":404,"res":{"message":"Cannot POST /video/upload","error":"Not Found","statusCode":404}}
+{"timestamp":"2026-08-11T02:46:05.998Z","status":400,"res":{"message":"Multipart: Unexpected end of form","error":"Bad Request","statusCode":400}}

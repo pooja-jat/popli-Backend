@@ -19,7 +19,7 @@ import { AdminService } from './admin.service';
 import { RedisService } from '../redis/redis.service';
 import { KafkaProducerService } from '../kafka/kafka-producer.service';
 import { Inject } from '@nestjs/common';
-import { PayoutProvider } from '../payout/payout-provider.interface';
+import type { PayoutProvider } from '../payout/payout-provider.interface';
 
 @ApiTags('admin')
 @Controller('admin')
