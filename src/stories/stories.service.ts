@@ -4,10 +4,12 @@ import {
   UnauthorizedException,
   Optional,
 } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ChatGateway } from '../chat/chat.gateway';
+import { VideoService } from '../video/video.service';
 import {
   CreateStoryDto,
   ReactStoryDto,
@@ -16,15 +18,45 @@ import {
 
 @Injectable()
 export class StoriesService {
- constructor(
+  constructor(
     private prisma: PrismaService,
+    private videoService: VideoService,
     @Optional() private notificationsGateway?: NotificationsGateway,
     @Optional() private notificationsService?: NotificationsService,
     @Optional() private chatGateway?: ChatGateway,
   ) {}
+@Cron(CronExpression.EVERY_HOUR)
+  async cleanupExpiredStories() {
+    const expired = await this.prisma.story.findMany({
+      where: { expiresAt: { lte: new Date() } },
+      select: { id: true, cfVideoId: true, mediaType: true },
+    });
+
+    for (const story of expired) {
+      try {
+        if (story.mediaType === 'VIDEO' && story.cfVideoId) {
+          await this.videoService.deleteAsset(story.cfVideoId);
+        }
+        await this.prisma.story.delete({ where: { id: story.id } });
+      } catch (err: any) {
+        console.error(`Failed to cleanup story ${story.id}:`, err.message);
+      }
+    }
+  }
 
   async createStory(creatorId: string, dto: CreateStoryDto) {
-    // Expires in 24 hours
+    if (dto.idempotencyKey) {
+      const existing = await this.prisma.story.findUnique({
+        where: { idempotencyKey: dto.idempotencyKey },
+        include: {
+          creator: {
+            select: { id: true, username: true, avatar: true, name: true },
+          },
+        },
+      });
+      if (existing) return existing;
+    }
+
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
     let layersData = dto.layersData;
@@ -76,7 +108,7 @@ export class StoriesService {
 
     // Create the story and archive it immediately since we don't have a cron job
     const [story, archive] = await this.prisma.$transaction([
-      this.prisma.story.create({
+this.prisma.story.create({
         data: {
           mediaUrl: dto.mediaUrl,
           mediaType: dto.mediaType,
@@ -88,6 +120,8 @@ export class StoriesService {
           originalStoryId: rootOriginalStoryId,
           originalOwnerId: rootOriginalOwnerId,
           originalOwnerUsername: rootOriginalOwnerUsername,
+          cfVideoId: dto.cfVideoId ?? null,
+          idempotencyKey: dto.idempotencyKey ?? null,
         },
         include: {
           creator: {

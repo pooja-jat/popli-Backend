@@ -35,12 +35,19 @@ constructor(
     private redis: RedisService,
     private platformService: PlatformService,
   ) {}
-  async createReel(creatorId: string, dto: CreateReelDto) {
+async createReel(creatorId: string, dto: CreateReelDto) {
     let layersData = dto.layersData;
     if (typeof layersData === 'string') {
       try {
         layersData = JSON.parse(layersData);
       } catch (e) {}
+    }
+
+    if ((dto as any).idempotencyKey) {
+      const existing = await this.prisma.reel.findUnique({
+        where: { idempotencyKey: (dto as any).idempotencyKey },
+      });
+      if (existing) return existing;
     }
 
     const {

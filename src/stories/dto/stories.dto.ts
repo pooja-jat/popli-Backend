@@ -17,11 +17,11 @@ export class CreateStoryDto {
   @ApiProperty()
   @IsString()
   @IsNotEmpty()
-  mediaUrl: string;
+  mediaUrl!: string;
 
   @ApiProperty({ enum: MediaType })
   @IsEnum(MediaType)
-  mediaType: MediaType;
+  mediaType!: MediaType;
 
   @ApiPropertyOptional()
   @IsBoolean()
@@ -60,48 +60,58 @@ export class CreateStoryDto {
   @IsString()
   originalOwnerUsername?: string;
 
-  @ApiPropertyOptional()
+@ApiPropertyOptional()
   @IsOptional()
   layersData?: any;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  cfVideoId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  idempotencyKey?: string;
 }
 
 export class ReactStoryDto {
   @ApiProperty()
   @IsString()
   @IsNotEmpty()
-  emoji: string;
+  emoji!: string;
 }
 
 export class CreateHighlightDto {
   @ApiProperty()
   @IsString()
   @IsNotEmpty()
-  title: string;
+  title!: string;
 
   @ApiProperty()
   @IsString()
   @IsNotEmpty()
-  coverUrl: string;
+  coverUrl!: string;
 
   @ApiProperty()
   @IsArray()
   @IsString({ each: true })
-  storyIds: string[];
+  storyIds!: string[];
 }
 
 export class InteractStoryDto {
   @ApiProperty()
   @IsString()
   @IsNotEmpty()
-  layerId: string;
+  layerId!: string;
 
   @ApiProperty()
   @IsString()
   @IsNotEmpty()
-  type: string;
+  type!: string;
 
   @ApiProperty()
   @IsString()
   @IsNotEmpty()
-  value: string;
+  value!: string;
 }

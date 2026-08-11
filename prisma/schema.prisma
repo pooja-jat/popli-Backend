@@ -181,9 +181,10 @@ model Reel {
   copyrightFlag           Boolean            @default(false)
   ageRestricted           Boolean            @default(false)
 durationSeconds         Int                @default(0)
-  muxAssetId              String?
+muxAssetId              String?
   muxPlaybackId           String?
   muxUploadId             String?
+  idempotencyKey          String?            @unique
   challengeId             String?
    challengeApprovalStatus ReelApprovalStatus @default(PENDING)
   allowComments           Boolean            @default(true)
@@ -287,6 +288,8 @@ model Story {
   originalOwnerId       String?
   originalOwnerUsername String?
   originalStoryId       String?
+  cfVideoId             String?
+  idempotencyKey        String?            @unique
   creator               User               @relation("CreatorStories", fields: [creatorId], references: [id], onDelete: Cascade)
   interactions          StoryInteraction[]
   reactions             StoryReaction[]

@@ -97,6 +97,7 @@ if (!response.ok) {
   }
 async getAssetByUploadId(uploadId: string): Promise<{
     status: string;
+    pctComplete?: number;
     assetId?: string;
     playbackId?: string;
     mediaUrl?: string;
@@ -115,8 +116,11 @@ async getAssetByUploadId(uploadId: string): Promise<{
     const data = await response.json() as any;
     const result = data.result;
 
-    if (!result || !result.readyToStream || result.status?.state !== 'ready') {
-      return { status: result?.status?.state ?? 'preparing' };
+if (!result || !result.readyToStream || result.status?.state !== 'ready') {
+      return {
+        status: result?.status?.state ?? 'queued',
+        pctComplete: result?.status?.pctComplete ? parseFloat(result.status.pctComplete) : undefined,
+      };
     }
 
     const uid = result.uid;
@@ -172,16 +176,21 @@ async handleWebhook(rawBody: Buffer, signature: string): Promise<void> {
 const uid = event.uid as string;
     if (!uid) return;
 
-    if (event.readyToStream === true && event.status?.state === 'ready') {
-      const thumbnailUrl = `https://customer-${this.customerSubdomain}.cloudflarestream.com/${uid}/thumbnails/thumbnail.jpg`;
+if (event.readyToStream === true && event.status?.state === 'ready') {
+      const cfThumbnailUrl = `https://customer-${this.customerSubdomain}.cloudflarestream.com/${uid}/thumbnails/thumbnail.jpg`;
       const playbackUrl = `https://customer-${this.customerSubdomain}.cloudflarestream.com/${uid}/manifest/video.m3u8`;
       const duration = event.duration as number | undefined;
+
+      const existing = await this.prisma.reel.findFirst({
+        where: { muxAssetId: uid },
+        select: { thumbnailUrl: true },
+      });
 
       await this.prisma.reel.updateMany({
         where: { muxAssetId: uid },
         data: {
           mediaUrl: playbackUrl,
-          thumbnailUrl,
+          thumbnailUrl: existing?.thumbnailUrl ? existing.thumbnailUrl : cfThumbnailUrl,
           muxPlaybackId: uid,
           durationSeconds: duration ? Math.round(duration) : undefined,
         },
@@ -189,7 +198,6 @@ const uid = event.uid as string;
 
       this.logger.log(`Updated reel for Cloudflare Stream video: ${uid}`);
     }
-
 if (event.status?.state === 'error') {
       const errorCode = event.status?.errorReasonCode;
       this.logger.error(`Cloudflare Stream video errored: ${uid} — ${errorCode}`);
