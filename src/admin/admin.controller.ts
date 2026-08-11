@@ -149,11 +149,30 @@ export class AdminController {
   getWithdrawals(@Req() req: any, @Query('page') page?: string, @Query('limit') limit?: string) {
     return this.adminService.getWithdrawals(req.user.id, page ? parseInt(page) : 1, limit ? parseInt(limit) : 50);
   }
-
-@Post('withdrawals/:id/approve')
+@Get('withdrawals/:id/review')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Approve a withdrawal request and initiate Razorpay payout' })
+  @ApiOperation({ summary: 'Get full withdrawal request detail for admin review' })
+  reviewWithdrawal(@Param('id') reqId: string, @Req() req: any) {
+    return this.adminService.reviewWithdrawal(reqId, req.user.id);
+  }
+
+  @Post('withdrawals/:id/draft')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Admin selects approved amount and creates payment draft' })
+  createPaymentDraft(
+    @Param('id') reqId: string,
+    @Body('approvedAmount') approvedAmount: number,
+    @Req() req: any,
+  ) {
+    return this.adminService.createPaymentDraft(reqId, req.user.id, approvedAmount);
+  }
+
+  @Post('withdrawals/:id/send')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Admin confirms and sends Cashfree payout from DRAFT state' })
   approveWithdrawal(@Param('id') reqId: string, @Req() req: any) {
     return this.adminService.approveWithdrawal(reqId, req.user.id, this.payoutProvider);
   }
@@ -170,15 +189,31 @@ export class AdminController {
     return this.adminService.rejectWithdrawal(reqId, req.user.id, reason);
   }
 
-  @Post('withdrawals/payout-webhook')
-  @ApiOperation({ summary: 'Razorpay payout webhook — no auth, verified by signature' })
+  @Post('withdrawals/cashfree-webhook')
+  @ApiOperation({ summary: 'Cashfree payout webhook — verified by signature + timestamp' })
   handlePayoutWebhook(
     @Req() req: RawBodyRequest<Request>,
-    @Headers('x-razorpay-signature') signature: string,
+    @Headers('x-webhook-signature') signature: string,
+    @Headers('x-webhook-timestamp') timestamp: string,
   ) {
-    return this.adminService.handlePayoutWebhook(req.rawBody!, signature);
+    return this.adminService.handlePayoutWebhook(req.rawBody!, signature, timestamp);
   }
 
+  @Get('payment-process')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get payment process list (DRAFT, PROCESSING, SUCCESS, FAILED, REVERSED)' })
+  getPaymentProcessList(@Req() req: any, @Query('status') status?: string) {
+    return this.adminService.getPaymentProcessList(req.user.id, status);
+  }
+
+  @Get('payment-process/:id')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get full payment process detail with earnings breakdown' })
+  getPaymentProcessDetail(@Param('id') reqId: string, @Req() req: any) {
+    return this.adminService.getPaymentProcessDetail(reqId, req.user.id);
+  }
   // Gifts
   @Get('gifts')
   @UseGuards(JwtAuthGuard)

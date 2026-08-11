@@ -1,12 +1,12 @@
 import { Module, Global } from '@nestjs/common';
-import { RazorpayPayoutProvider } from './razorpay-payout.provider';
+import { CashfreePayoutProvider } from './cashfree-payout.provider';
 
 @Global()
 @Module({
   providers: [
     {
       provide: 'PAYOUT_PROVIDER',
-      useClass: RazorpayPayoutProvider,
+      useClass: CashfreePayoutProvider,
     },
   ],
   exports: ['PAYOUT_PROVIDER'],

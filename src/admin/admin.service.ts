@@ -532,7 +532,164 @@ async getWithdrawals(adminId: string, page = 1, limit = 50) {
     });
   }
 
-async approveWithdrawal(reqId: string, adminId: string, payoutProvider: any) {
+async reviewWithdrawal(reqId: string, adminId: string) {
+    const admin = await this.prisma.user.findUnique({ where: { id: adminId } });
+    const partner = !admin ? await this.prisma.adminPartner.findUnique({ where: { id: adminId } }) : null;
+    if (!admin && !partner) throw new UnauthorizedException('Not authorized');
+
+    const request = await this.prisma.withdrawalRequest.findUnique({
+      where: { id: reqId },
+      include: {
+        wallet: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                username: true,
+                email: true,
+                phone: true,
+                createdAt: true,
+                wallet: {
+                  select: {
+                    withdrawableBalance: true,
+                    totalEarnings: true,
+                    totalWithdrawn: true,
+                  },
+                },
+                kycRecord: {
+                  select: {
+                    fullName: true,
+                    upiId: true,
+                    bankAccount: true,
+                    ifscCode: true,
+                    isPanVerified: true,
+                    isBankLinked: true,
+                    isUpiLinked: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!request) throw new BadRequestException('Withdrawal request not found');
+
+    const kyc = request.wallet.user.kycRecord;
+    const wallet = request.wallet;
+
+    return {
+      id: request.id,
+      status: request.status,
+      amount: request.amount,
+      netPayable: request.netPayable,
+      tdsDeducted: request.tdsDeducted,
+      platformFeeDeducted: request.platformFeeDeducted,
+      idempotencyKey: request.idempotencyKey,
+      createdAt: request.createdAt,
+      creator: {
+        id: wallet.user.id,
+        name: wallet.user.name,
+        username: wallet.user.username,
+        email: wallet.user.email,
+        phone: wallet.user.phone,
+        createdAt: wallet.user.createdAt,
+        availableBalance: wallet.withdrawableBalance,
+        totalEarnings: wallet.totalEarnings,
+        totalWithdrawn: wallet.totalWithdrawn,
+      },
+      paymentMethod: kyc?.upiId
+        ? { type: 'UPI', upiId: kyc.upiId, verified: kyc.isUpiLinked }
+        : kyc?.bankAccount
+        ? {
+            type: 'BANK',
+            accountNumber: `XXXX${kyc.bankAccount.slice(-4)}`,
+            ifscCode: kyc.ifscCode,
+            verified: kyc.isBankLinked,
+          }
+        : null,
+      kycVerified: kyc?.isPanVerified ?? false,
+    };
+  }
+
+  async createPaymentDraft(
+    reqId: string,
+    adminId: string,
+    approvedAmount: number,
+  ) {
+    const admin = await this.prisma.user.findUnique({ where: { id: adminId } });
+    const partner = !admin ? await this.prisma.adminPartner.findUnique({ where: { id: adminId } }) : null;
+    if (!admin && !partner) throw new UnauthorizedException('Not authorized');
+
+    if (!approvedAmount || approvedAmount <= 0) {
+      throw new BadRequestException('Approved amount must be greater than 0');
+    }
+
+    const request = await this.prisma.withdrawalRequest.findUnique({
+      where: { id: reqId },
+      include: { wallet: { include: { user: { include: { kycRecord: true } } } } },
+    });
+
+    if (!request) throw new BadRequestException('Withdrawal request not found');
+    if (!['PENDING', 'UNDER_REVIEW'].includes(request.status)) {
+      throw new BadRequestException(`Cannot create draft for request with status: ${request.status}`);
+    }
+    if (approvedAmount > request.amount) {
+      throw new BadRequestException('Approved amount cannot exceed requested amount');
+    }
+    if (approvedAmount > request.wallet.withdrawableBalance + request.amount) {
+      throw new BadRequestException('Approved amount exceeds creator available balance');
+    }
+
+    const kyc = request.wallet.user.kycRecord;
+    if (!kyc?.isPanVerified) throw new BadRequestException('Creator KYC is incomplete');
+    if (!kyc.upiId && !kyc.bankAccount) throw new BadRequestException('Creator has no verified payment method');
+
+    const tdsPercent = request.tdsDeducted / request.amount;
+    const feePercent = request.platformFeeDeducted / request.amount;
+    const newTds = Math.round(approvedAmount * tdsPercent * 100) / 100;
+    const newFee = Math.round(approvedAmount * feePercent * 100) / 100;
+    const newNetPayable = Math.round((approvedAmount - newTds - newFee) * 100) / 100;
+
+    await this.prisma.withdrawalRequest.update({
+      where: { id: reqId },
+      data: {
+        status: 'DRAFT',
+        approvedAmount,
+        tdsDeducted: newTds,
+        platformFeeDeducted: newFee,
+        netPayable: newNetPayable,
+        processedBy: adminId,
+      },
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        actorId: adminId,
+        action: 'WITHDRAWAL_DRAFT_CREATED',
+        entityType: 'WithdrawalRequest',
+        entityId: reqId,
+        oldValue: { status: request.status, amount: request.amount },
+        newValue: { status: 'DRAFT', approvedAmount, netPayable: newNetPayable },
+      },
+    });
+
+    return {
+      withdrawalId: reqId,
+      approvedAmount,
+      netPayable: newNetPayable,
+      tdsDeducted: newTds,
+      platformFeeDeducted: newFee,
+      paymentMethod: kyc.upiId
+        ? { type: 'UPI', upiId: kyc.upiId }
+        : { type: 'BANK', accountNumber: `XXXX${kyc.bankAccount!.slice(-4)}`, ifscCode: kyc.ifscCode },
+      cashfreeEnvironment: process.env.CASHFREE_ENV || 'sandbox',
+    };
+  }
+
+  async approveWithdrawal(reqId: string, adminId: string, payoutProvider: any) {
     const admin = await this.prisma.user.findUnique({ where: { id: adminId } });
     const partner = !admin ? await this.prisma.adminPartner.findUnique({ where: { id: adminId } }) : null;
     if (!admin && !partner) throw new UnauthorizedException('Not authorized');
@@ -542,9 +699,9 @@ async approveWithdrawal(reqId: string, adminId: string, payoutProvider: any) {
       include: { wallet: { include: { user: { include: { kycRecord: true } } } } },
     });
 
-    if (!request) throw new BadRequestException('Withdrawal request not found');
-    if (request.status !== 'PENDING' && request.status !== 'UNDER_REVIEW') {
-      throw new BadRequestException(`Cannot approve a request with status: ${request.status}`);
+if (!request) throw new BadRequestException('Withdrawal request not found');
+    if (request.status !== 'DRAFT') {
+      throw new BadRequestException(`Payment can only be sent from DRAFT status. Current: ${request.status}`);
     }
     if (!request.idempotencyKey) throw new BadRequestException('Invalid withdrawal request: missing idempotency key');
 
@@ -557,6 +714,7 @@ async approveWithdrawal(reqId: string, adminId: string, payoutProvider: any) {
       data: { status: 'PROCESSING' },
     });
 
+   const payoutAmount = (request as any).approvedAmount ?? request.amount;
     const payoutResult = await payoutProvider.initiatePayout({
       withdrawalId: reqId,
       idempotencyKey: request.idempotencyKey,
@@ -623,11 +781,13 @@ async approveWithdrawal(reqId: string, adminId: string, payoutProvider: any) {
       const currentWallet = await tx.wallet.findUnique({ where: { id: request.walletId } });
       if (!currentWallet) throw new BadRequestException('Wallet not found');
 
-      const updatedRequest = await tx.withdrawalRequest.update({
+const updatedRequest = await tx.withdrawalRequest.update({
         where: { id: reqId },
         data: {
           status: isInstantSuccess ? 'SUCCESS' : 'PROCESSING',
           payoutId: payoutResult.payoutId,
+          cashfreeTransferId: payoutResult.payoutId,
+          cashfreeReferenceId: payoutResult.providerResponse?.data?.transfer?.referenceId || null,
           providerResponse: payoutResult.providerResponse,
           processedBy: adminId,
           processedAt: new Date(),
@@ -701,8 +861,8 @@ async approveWithdrawal(reqId: string, adminId: string, payoutProvider: any) {
         include: { wallet: true },
       });
 
-      if (!request) throw new BadRequestException('Withdrawal request not found');
-      if (request.status !== 'PENDING' && request.status !== 'UNDER_REVIEW') {
+  if (!request) throw new BadRequestException('Withdrawal request not found');
+      if (!['PENDING', 'UNDER_REVIEW', 'DRAFT'].includes(request.status)) {
         throw new BadRequestException(`Cannot reject a request with status: ${request.status}`);
       }
 
@@ -761,15 +921,17 @@ async approveWithdrawal(reqId: string, adminId: string, payoutProvider: any) {
     });
   }
 
-  async handlePayoutWebhook(rawBody: Buffer, signature: string) {
+async handlePayoutWebhook(rawBody: Buffer, signature: string, timestamp: string) {
     const crypto = require('crypto');
+
+    const signatureData = timestamp + rawBody.toString();
     const expectedSignature = crypto
-      .createHmac('sha256', process.env.RAZORPAY_WEBHOOK_SECRET!)
-      .update(rawBody)
-      .digest('hex');
+      .createHmac('sha256', process.env.CASHFREE_PAYOUT_CLIENT_SECRET!)
+      .update(signatureData)
+      .digest('base64');
 
     if (expectedSignature !== signature) {
-      throw new BadRequestException('Invalid webhook signature');
+      throw new BadRequestException('Invalid Cashfree webhook signature');
     }
 
     let event: any;
@@ -779,37 +941,45 @@ async approveWithdrawal(reqId: string, adminId: string, payoutProvider: any) {
       throw new BadRequestException('Invalid webhook payload');
     }
 
-    const payoutEntity = event?.payload?.payout?.entity;
-    if (!payoutEntity) return { received: true };
+    const transferData = event?.data || event;
+    const cfTransferId = transferData?.transfer?.referenceId || transferData?.referenceId;
+    const transferId = transferData?.transfer?.transferId || transferData?.transferId;
+    const eventType = event?.event || event?.type;
 
-    const payoutId = payoutEntity.id;
-    const referenceId = payoutEntity.reference_id;
+    if (!cfTransferId && !transferId) return { received: true };
 
     const withdrawalRequest = await this.prisma.withdrawalRequest.findFirst({
       where: {
         OR: [
-          { payoutId },
-          { idempotencyKey: referenceId },
-        ],
+          cfTransferId ? { cashfreeTransferId: cfTransferId } : undefined,
+          transferId ? { cashfreeTransferId: transferId } : undefined,
+          transferId ? { idempotencyKey: `TXN_${transferId}` } : undefined,
+        ].filter(Boolean) as any,
       },
       include: { wallet: true },
     });
 
     if (!withdrawalRequest) return { received: true };
 
-    if (['SUCCESS', 'FAILED', 'REJECTED'].includes(withdrawalRequest.status)) {
+    if (
+      withdrawalRequest.webhookProcessedAt &&
+      ['SUCCESS', 'FAILED', 'REVERSED', 'REJECTED'].includes(withdrawalRequest.status)
+    ) {
       return { received: true };
     }
 
-    const eventType = event.event;
+    await this.prisma.withdrawalRequest.update({
+      where: { id: withdrawalRequest.id },
+      data: { webhookProcessedAt: new Date() },
+    });
 
-    if (eventType === 'payout.processed') {
+    if (eventType === 'TRANSFER_SUCCESS' || eventType === 'payout.processed') {
       await this.prisma.$transaction(async (tx) => {
         await tx.withdrawalRequest.update({
           where: { id: withdrawalRequest.id },
           data: {
             status: 'SUCCESS',
-            providerResponse: payoutEntity,
+            providerResponse: transferData,
             processedAt: new Date(),
           },
         });
@@ -828,7 +998,7 @@ async approveWithdrawal(reqId: string, adminId: string, payoutProvider: any) {
             debit: 0,
             credit: 0,
             balanceAfter: withdrawalRequest.wallet.withdrawableBalance,
-            description: `Payout confirmed by Razorpay webhook. Ref: ${payoutId}`,
+            description: `Cashfree payout confirmed. Ref: ${cfTransferId || transferId}`,
           },
         });
       });
@@ -839,23 +1009,34 @@ async approveWithdrawal(reqId: string, adminId: string, payoutProvider: any) {
           type: 'WITHDRAWAL_APPROVED',
           title: 'Withdrawal Successful',
           body: `₹${withdrawalRequest.netPayable} has been successfully transferred to your account.`,
-          metaData: { withdrawalId: withdrawalRequest.id, payoutId },
+          metaData: { withdrawalId: withdrawalRequest.id, transferId: cfTransferId || transferId },
         },
       }).catch(() => {});
     }
 
-    if (eventType === 'payout.failed' || eventType === 'payout.reversed' || eventType === 'payout.cancelled') {
+    if (
+      eventType === 'TRANSFER_FAILED' ||
+      eventType === 'TRANSFER_REVERSED' ||
+      eventType === 'payout.failed' ||
+      eventType === 'payout.reversed' ||
+      eventType === 'payout.cancelled'
+    ) {
       await this.prisma.$transaction(async (tx) => {
         const wallet = await tx.wallet.update({
           where: { id: withdrawalRequest.walletId },
           data: { withdrawableBalance: { increment: withdrawalRequest.amount } },
         });
 
+        const newStatus =
+          eventType === 'TRANSFER_REVERSED' || eventType === 'payout.reversed'
+            ? 'REVERSED'
+            : 'FAILED';
+
         await tx.withdrawalRequest.update({
           where: { id: withdrawalRequest.id },
           data: {
-            status: 'FAILED',
-            providerResponse: payoutEntity,
+            status: newStatus,
+            providerResponse: transferData,
             processedAt: new Date(),
             newBalance: wallet.withdrawableBalance,
           },
@@ -869,7 +1050,7 @@ async approveWithdrawal(reqId: string, adminId: string, payoutProvider: any) {
             sourceId: withdrawalRequest.id,
             credit: withdrawalRequest.amount,
             balanceAfter: wallet.withdrawableBalance,
-            description: `Payout ${eventType.replace('payout.', '')} — ₹${withdrawalRequest.amount} refunded. Ref: ${payoutId}`,
+            description: `Cashfree payout ${newStatus.toLowerCase()} — ₹${withdrawalRequest.amount} refunded. Ref: ${cfTransferId || transferId}`,
           },
         });
       });
@@ -880,19 +1061,230 @@ async approveWithdrawal(reqId: string, adminId: string, payoutProvider: any) {
           type: 'WITHDRAWAL_FAILED',
           title: 'Withdrawal Failed',
           body: `Your withdrawal of ₹${withdrawalRequest.amount} could not be completed. The amount has been returned to your wallet.`,
-          metaData: { withdrawalId: withdrawalRequest.id, payoutId },
+          metaData: { withdrawalId: withdrawalRequest.id, transferId: cfTransferId || transferId },
         },
       }).catch(() => {});
     }
 
-    if (eventType === 'payout.queued') {
+    if (eventType === 'TRANSFER_PENDING' || eventType === 'payout.queued') {
       await this.prisma.withdrawalRequest.update({
         where: { id: withdrawalRequest.id },
-        data: { status: 'PROCESSING', providerResponse: payoutEntity },
+        data: { status: 'PROCESSING', providerResponse: transferData },
       });
     }
 
     return { received: true };
+  }
+  async getPaymentProcessList(adminId: string, status?: string) {
+    const admin = await this.prisma.user.findUnique({ where: { id: adminId } });
+    const partner = !admin ? await this.prisma.adminPartner.findUnique({ where: { id: adminId } }) : null;
+    if (!admin && !partner) throw new UnauthorizedException('Not authorized');
+
+    const whereClause: any = {};
+    if (status && status !== 'ALL') {
+      whereClause.status = status;
+    } else {
+      whereClause.status = { in: ['DRAFT', 'PROCESSING', 'SUCCESS', 'FAILED', 'REVERSED'] };
+    }
+
+    const records = await this.prisma.withdrawalRequest.findMany({
+      where: whereClause,
+      orderBy: { updatedAt: 'desc' },
+      take: 100,
+      include: {
+        wallet: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                username: true,
+                email: true,
+                phone: true,
+                kycRecord: {
+                  select: {
+                    upiId: true,
+                    bankAccount: true,
+                    ifscCode: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return records.map((r) => ({
+      id: r.id,
+      status: r.status,
+      amount: r.amount,
+      approvedAmount: (r as any).approvedAmount,
+      netPayable: r.netPayable,
+      tdsDeducted: r.tdsDeducted,
+      platformFeeDeducted: r.platformFeeDeducted,
+      cashfreeTransferId: (r as any).cashfreeTransferId,
+      cashfreeReferenceId: (r as any).cashfreeReferenceId,
+      payoutId: r.payoutId,
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt,
+      processedAt: r.processedAt,
+      creator: {
+        id: r.wallet.user.id,
+        name: r.wallet.user.name,
+        username: r.wallet.user.username,
+        email: r.wallet.user.email,
+        phone: r.wallet.user.phone,
+      },
+      paymentMethod: r.wallet.user.kycRecord?.upiId
+        ? { type: 'UPI', upiId: r.wallet.user.kycRecord.upiId }
+        : r.wallet.user.kycRecord?.bankAccount
+        ? { type: 'BANK', accountNumber: `XXXX${r.wallet.user.kycRecord.bankAccount.slice(-4)}` }
+        : null,
+    }));
+  }
+
+  async getPaymentProcessDetail(reqId: string, adminId: string) {
+    const admin = await this.prisma.user.findUnique({ where: { id: adminId } });
+    const partner = !admin ? await this.prisma.adminPartner.findUnique({ where: { id: adminId } }) : null;
+    if (!admin && !partner) throw new UnauthorizedException('Not authorized');
+
+    const request = await this.prisma.withdrawalRequest.findUnique({
+      where: { id: reqId },
+      include: {
+        wallet: {
+          include: {
+            user: {
+              include: {
+                kycRecord: true,
+                wallet: {
+                  include: {
+                    ledgers: {
+                      orderBy: { createdAt: 'desc' },
+                      take: 50,
+                      include: {
+                        // reelId available for cross-referencing
+                      },
+                    },
+                    withdrawalRequests: {
+                      orderBy: { createdAt: 'desc' },
+                      take: 20,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!request) throw new BadRequestException('Payment record not found');
+
+    const user = request.wallet.user;
+    const kyc = user.kycRecord;
+    const wallet = user.wallet!;
+
+    const viewEarnings = wallet.ledgers
+      .filter((l) => l.source === 'VIEW_EARNING')
+      .reduce((s, l) => s + l.credit, 0);
+    const giftEarnings = wallet.ledgers
+      .filter((l) => l.source === 'GIFT_RECEIVED')
+      .reduce((s, l) => s + l.credit, 0);
+
+    const reelIds = [...new Set(wallet.ledgers.filter((l) => l.reelId).map((l) => l.reelId!))];
+    const reels = reelIds.length
+      ? await this.prisma.reel.findMany({
+          where: { id: { in: reelIds } },
+          select: {
+            id: true,
+            description: true,
+            viewsCount: true,
+            likesCount: true,
+            commentsCount: true,
+            sharesCount: true,
+            savesCount: true,
+            createdAt: true,
+          },
+        })
+      : [];
+
+    const reelMap = new Map(reels.map((r) => [r.id, r]));
+
+    const earningsByReel = wallet.ledgers
+      .filter((l) => l.source === 'VIEW_EARNING' && l.reelId)
+      .reduce<Record<string, { reel: any; totalEarning: number; entries: any[] }>>((acc, l) => {
+        const key = l.reelId!;
+        if (!acc[key]) {
+          acc[key] = { reel: reelMap.get(key) || null, totalEarning: 0, entries: [] };
+        }
+        acc[key].totalEarning += l.credit;
+        acc[key].entries.push({
+          id: l.id,
+          credit: l.credit,
+          description: l.description,
+          createdAt: l.createdAt,
+        });
+        return acc;
+      }, {});
+
+    const giftLedgerEntries = wallet.ledgers.filter((l) => l.source === 'GIFT_RECEIVED');
+
+    return {
+      withdrawalId: request.id,
+      status: request.status,
+      amount: request.amount,
+      approvedAmount: (request as any).approvedAmount,
+      netPayable: request.netPayable,
+      tdsDeducted: request.tdsDeducted,
+      platformFeeDeducted: request.platformFeeDeducted,
+      cashfreeTransferId: (request as any).cashfreeTransferId,
+      cashfreeReferenceId: (request as any).cashfreeReferenceId,
+      payoutId: request.payoutId,
+      createdAt: request.createdAt,
+      processedAt: request.processedAt,
+      creator: {
+        id: user.id,
+        name: user.name,
+        username: user.username,
+        email: user.email,
+        phone: user.phone,
+        createdAt: user.createdAt,
+        totalEarnings: wallet.totalEarnings,
+        withdrawableBalance: wallet.withdrawableBalance,
+        totalWithdrawn: wallet.totalWithdrawn,
+        viewEarnings,
+        giftEarnings,
+      },
+      paymentMethod: kyc?.upiId
+        ? { type: 'UPI', upiId: kyc.upiId, verified: kyc.isUpiLinked }
+        : kyc?.bankAccount
+        ? {
+            type: 'BANK',
+            accountNumber: `XXXX${kyc.bankAccount.slice(-4)}`,
+            ifscCode: kyc.ifscCode,
+            verified: kyc.isBankLinked,
+          }
+        : null,
+      earningsByReel: Object.values(earningsByReel),
+      giftTransactions: giftLedgerEntries.map((l) => ({
+        id: l.id,
+        credit: l.credit,
+        description: l.description,
+        reelId: l.reelId,
+        createdAt: l.createdAt,
+      })),
+      withdrawalHistory: wallet.withdrawalRequests.map((w) => ({
+        id: w.id,
+        amount: w.amount,
+        netPayable: w.netPayable,
+        status: w.status,
+        cashfreeTransferId: (w as any).cashfreeTransferId,
+        rejectionReason: w.rejectionReason,
+        createdAt: w.createdAt,
+        processedAt: w.processedAt,
+      })),
+    };
   }
 
   // Gifts

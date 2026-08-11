@@ -97,13 +97,14 @@ constructor(
  const moderationFlag = await this.prisma.platformFeatureFlag.findUnique({ where: { key: 'AI_MODERATION_ENABLED' } });
     const requiresReview = moderationFlag?.enabled ?? false;
 
-    const reel = await this.prisma.reel.create({
+ const reel = await this.prisma.reel.create({
       data: {
         ...restDto,
         layersData,
         creatorId,
+        thumbnailUrl: restDto.thumbnailUrl ?? '',
         ...(requiresReview && { challengeApprovalStatus: 'PENDING' }),
-       ...(challengeId && { challengeId, challengeApprovalStatus: 'PENDING' }),
+        ...(challengeId && { challengeId, challengeApprovalStatus: 'PENDING' }),
         ...(validTaggedUserIds.length > 0 && {
           taggedUsers: {
             connect: validTaggedUserIds.map((id) => ({ id })),
@@ -113,9 +114,9 @@ constructor(
           location: {
             create: {
               name: location.locationName,
-              latitude: location.latitude,
-              longitude: location.longitude,
-              placeId: location.placeId,
+              latitude: location.latitude ?? 0,
+              longitude: location.longitude ?? 0,
+              placeId: location.placeId ?? null,
             },
           },
         }),

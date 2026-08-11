@@ -33,6 +33,7 @@
     "@nestjs/throttler": "^6.5.0",
     "@nestjs/websockets": "^11.1.24",
     "@prisma/client": "^6.19.3",
+    "@sentry/nestjs": "^10.70.0",
     "bcrypt": "^6.0.0",
     "cache-manager": "^7.2.8",
     "cache-manager-redis-yet": "^5.1.5",

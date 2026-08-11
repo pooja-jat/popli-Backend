@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import * as crypto from 'crypto';
+import * as Sentry from '@sentry/nestjs';
 
 @Injectable()
 export class VideoService {
@@ -46,11 +47,15 @@ async uploadVideoBuffer(buffer: Buffer, mimeType: string): Promise<{
       body: formData,
     });
 
-    if (!response.ok) {
+if (!response.ok) {
       const error = await response.text();
-      throw new Error(`Cloudflare video upload failed: ${error}`);
+      const err = new Error(`Cloudflare video upload failed: ${error}`);
+      Sentry.captureException(err, {
+        tags: { component: 'cloudflare-stream', operation: 'upload-buffer' },
+        extra: { mimeType, bufferSize: buffer.length },
+      });
+      throw err;
     }
-
     const data = await response.json() as any;
     const result = data.result;
 
@@ -74,11 +79,14 @@ async uploadVideoBuffer(buffer: Buffer, mimeType: string): Promise<{
       }),
     });
 
-    if (!response.ok) {
+ if (!response.ok) {
       const error = await response.text();
-      throw new Error(`Cloudflare direct upload creation failed: ${error}`);
+      const err = new Error(`Cloudflare direct upload creation failed: ${error}`);
+      Sentry.captureException(err, {
+        tags: { component: 'cloudflare-stream', operation: 'create-direct-upload' },
+      });
+      throw err;
     }
-
     const data = await response.json() as any;
     const result = data.result;
 
@@ -182,8 +190,13 @@ const uid = event.uid as string;
       this.logger.log(`Updated reel for Cloudflare Stream video: ${uid}`);
     }
 
-    if (event.status?.state === 'error') {
-      this.logger.error(`Cloudflare Stream video errored: ${uid} — ${event.status?.errorReasonCode}`);
+if (event.status?.state === 'error') {
+      const errorCode = event.status?.errorReasonCode;
+      this.logger.error(`Cloudflare Stream video errored: ${uid} — ${errorCode}`);
+      Sentry.captureException(new Error(`Cloudflare Stream processing error: ${errorCode}`), {
+        tags: { component: 'cloudflare-stream', operation: 'webhook-processing' },
+        extra: { uid, errorReasonCode: errorCode },
+      });
     }
   }
 }

@@ -663,12 +663,17 @@ model WithdrawalRequest {
   providerResponse    Json?
   processedBy         String?
   processedAt         DateTime?
-  oldBalance          Float?
-  newBalance          Float?
-  ipAddress           String?
-  createdAt           DateTime         @default(now())
-  updatedAt           DateTime         @updatedAt
-  wallet              Wallet           @relation(fields: [walletId], references: [id], onDelete: Cascade)
+oldBalance              Float?
+  newBalance              Float?
+  ipAddress               String?
+  approvedAmount          Float?
+  cashfreeTransferId      String?
+  cashfreeBeneficiaryId   String?
+  cashfreeReferenceId     String?
+  webhookProcessedAt      DateTime?
+  createdAt               DateTime         @default(now())
+  updatedAt               DateTime         @updatedAt
+  wallet                  Wallet           @relation(fields: [walletId], references: [id], onDelete: Cascade)
 }
 model ViewEvent {
   id                String   @id @default(uuid())
@@ -1038,12 +1043,13 @@ enum WithdrawalStatus {
   PENDING
   UNDER_REVIEW
   APPROVED
+  DRAFT
   PROCESSING
   SUCCESS
   FAILED
   REJECTED
+  REVERSED
 }
-
 enum ReferralStatus {
   PENDING
   COMPLETED

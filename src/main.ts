@@ -1,3 +1,4 @@
+import './instrument';
 import 'dotenv/config';
 import * as admin from 'firebase-admin';
 import { NestFactory } from '@nestjs/core';

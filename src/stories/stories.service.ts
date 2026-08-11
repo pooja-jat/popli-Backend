@@ -161,8 +161,7 @@ export class StoriesService {
       for (const mentionedUserId of uniqueValidUserIds) {
         // Wrap each user process in its own try/catch to isolate failures
         try {
-          // 1. Create Notification
-     const notification = await this.notificationsService?.createAndPush(
+const notification = await this.notificationsService?.createAndPush(
             {
               userId: mentionedUserId,
               senderId: creatorId,
@@ -174,7 +173,6 @@ export class StoriesService {
             },
             'Story Mention',
             `@${story.creator.username} mentioned you in their story.`,
-            { type: 'STORY_MENTION', targetId: story.id },
           )
           ?? await this.prisma.notification.create({
             data: {
