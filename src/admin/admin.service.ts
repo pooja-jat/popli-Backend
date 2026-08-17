@@ -256,6 +256,37 @@ async getFeatureFlags(adminId: string) {
     };
   }
 
+  async getReferrals(adminId: string) {
+    const admin = await this.prisma.user.findUnique({ where: { id: adminId } });
+    const partner = !admin ? await this.prisma.adminPartner.findUnique({ where: { id: adminId } }) : null;
+    if (!admin && !partner) throw new UnauthorizedException('Not authorized');
+
+    const usersWithReferrals = await this.prisma.user.findMany({
+      where: { referredById: { not: null } },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        createdAt: true,
+        referredById: true,
+      }
+    });
+
+    const referrerIds = [...new Set(usersWithReferrals.map((u: any) => u.referredById).filter(Boolean))] as string[];
+    const referrers = await this.prisma.user.findMany({
+      where: { id: { in: referrerIds } },
+      select: { id: true, name: true, phone: true }
+    });
+    
+    const referrerMap = new Map(referrers.map((r: any) => [r.id, r]));
+
+    return usersWithReferrals.map((u: any) => ({
+      ...u,
+      referrer: u.referredById ? referrerMap.get(u.referredById) : null
+    }));
+  }
+
 async getDashboardStats(adminId: string, city?: string) {
     const admin = await this.prisma.user.findUnique({ where: { id: adminId } });
     const partner = !admin ? await this.prisma.adminPartner.findUnique({ where: { id: adminId } }) : null;

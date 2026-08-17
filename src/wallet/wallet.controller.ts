@@ -12,12 +12,13 @@ export class WalletController {
   constructor(private readonly walletService: WalletService) {}
 
   @Post('recharge/webhook')
-  @ApiOperation({ summary: 'Razorpay webhook' })
-  razorpayWebhook(
+  @ApiOperation({ summary: 'Cashfree webhook' })
+  cashfreeWebhook(
     @Req() req: RawBodyRequest<Request>,
-    @Headers('x-razorpay-signature') signature: string,
+    @Headers('x-webhook-signature') signature: string,
+    @Headers('x-webhook-timestamp') timestamp: string,
   ) {
-    return this.walletService.handleRazorpayWebhook(req.rawBody!, signature);
+    return this.walletService.handleCashfreeWebhook(req.rawBody!, signature, timestamp);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -31,17 +32,17 @@ export class WalletController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @Post('recharge/create-order')
-  @ApiOperation({ summary: 'Create Razorpay order' })
+  @ApiOperation({ summary: 'Create Cashfree session' })
   createOrder(@Req() req: any, @Body() dto: CreateOrderDto) {
-    return this.walletService.createRazorpayOrder(req.user.id, dto.packageId);
+    return this.walletService.createCashfreeSession(req.user.id, dto.packageId);
   }
 
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @Post('recharge/verify')
-  @ApiOperation({ summary: 'Verify Razorpay payment and credit coins' })
+  @ApiOperation({ summary: 'Verify Cashfree payment and credit coins' })
   verifyPayment(@Req() req: any, @Body() dto: VerifyPaymentDto) {
-    return this.walletService.verifyAndCreditCoins(req.user.id, dto);
+    return this.walletService.verifyCashfreePayment(req.user.id, dto);
   }
 
   @UseGuards(JwtAuthGuard)

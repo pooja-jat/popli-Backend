@@ -44,15 +44,5 @@ export class VerifyPaymentDto {
   @ApiProperty()
   @IsString()
   @IsNotEmpty()
-  razorpayOrderId: string = '';
-
-  @ApiProperty()
-  @IsString()
-  @IsNotEmpty()
-  razorpayPaymentId: string = '';
-
-  @ApiProperty()
-  @IsString()
-  @IsNotEmpty()
-  razorpaySignature: string = '';
+  orderId: string = '';
 }

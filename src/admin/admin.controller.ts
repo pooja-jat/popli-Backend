@@ -70,6 +70,14 @@ export class AdminController {
     return this.adminService.getDashboardStats(req.user.id, city);
   }
 
+  @Get('referrals')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get Referrals' })
+  getReferrals(@Req() req: any) {
+    return this.adminService.getReferrals(req.user.id);
+  }
+
   @Get('kyc/pending')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
