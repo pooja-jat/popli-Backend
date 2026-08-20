@@ -61,6 +61,10 @@ export class CashfreePayoutProvider implements PayoutProvider {
       name: request.recipientName,
       email: `payout_${beneId.toLowerCase()}@popli.internal`,
       phone: '9999999999',
+      address1: 'Not Provided',
+      city: 'Delhi',
+      state: 'Delhi',
+      pincode: '110001',
     };
 
     if (request.upiId) {
@@ -98,7 +102,7 @@ export class CashfreePayoutProvider implements PayoutProvider {
         beneId,
         amount: String(amountInRupees),
         transferId,
-        transferMode: request.upiId ? 'UPI' : 'NEFT',
+        transferMode: request.upiId ? 'upi' : 'banktransfer',
         remarks: request.narration,
       };
 

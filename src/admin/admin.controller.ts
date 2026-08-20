@@ -408,7 +408,7 @@ export class AdminController {
   @Post('payment-records/:id/refund')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Execute a coin purchase refund via Razorpay' })
+  @ApiOperation({ summary: 'Execute a coin purchase refund via Cashfree' })
   executeCoinRefund(
     @Param('id') paymentRecordId: string,
     @Body() body: { refundType: 'FULL' | 'PARTIAL'; amount?: number; reason: string },

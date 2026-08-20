@@ -411,7 +411,7 @@ async createCashfreeSession(userId: string, packageId: string) {
             customer_phone: user?.phone || '9999999999'
           },
           order_meta: {
-            return_url: `http://localhost:8081`
+            return_url: `https://popli.app`
           }
         },
         {
@@ -428,7 +428,7 @@ async createCashfreeSession(userId: string, packageId: string) {
         data: {
           userId,
           packageId,
-          razorpayOrderId: orderId,
+          gatewayOrderId: orderId,
           amount: amountInInr,
           coinsToCredit,
           status: 'PENDING',
@@ -452,7 +452,7 @@ async createCashfreeSession(userId: string, packageId: string) {
 
   async verifyCashfreePayment(userId: string, dto: VerifyPaymentDto) {
     const paymentRecord = await this.prisma.paymentRecord.findUnique({
-      where: { razorpayOrderId: dto.orderId },
+      where: { gatewayOrderId: dto.orderId },
     });
 
     if (!paymentRecord) throw new BadRequestException('Payment record not found.');
@@ -490,7 +490,7 @@ async createCashfreeSession(userId: string, packageId: string) {
 
     if (gatewayPayment.order_status !== 'PAID') {
       await this.prisma.paymentRecord.update({
-        where: { razorpayOrderId: dto.orderId },
+        where: { gatewayOrderId: dto.orderId },
         data: { status: 'FAILED' },
       });
       throw new BadRequestException('Payment was not successful.');
@@ -498,7 +498,7 @@ async createCashfreeSession(userId: string, packageId: string) {
 
     const updatedWallet = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const fresh = await tx.paymentRecord.findUnique({
-        where: { razorpayOrderId: dto.orderId },
+        where: { gatewayOrderId: dto.orderId },
         select: { status: true },
       });
       if (fresh?.status === 'SUCCESS') {
@@ -506,7 +506,7 @@ async createCashfreeSession(userId: string, packageId: string) {
       }
 
       await tx.paymentRecord.update({
-        where: { razorpayOrderId: dto.orderId },
+        where: { gatewayOrderId: dto.orderId },
         data: {
           status: 'SUCCESS',
           paymentMethod: 'CASHFREE',
@@ -610,7 +610,7 @@ async createCashfreeSession(userId: string, packageId: string) {
       if (!orderId) return { received: true };
 
       const record = await this.prisma.paymentRecord.findUnique({
-        where: { razorpayOrderId: orderId },
+        where: { gatewayOrderId: orderId },
       });
 
       if (!record || record.status === 'SUCCESS') return { received: true };

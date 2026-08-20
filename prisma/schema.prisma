@@ -1005,7 +1005,7 @@ model CoinRefund {
   id                String          @id @default(uuid())
   paymentRecordId   String
   userId            String
-  razorpayRefundId  String?         @unique
+  gatewayRefundId   String?         @unique
   amount            Int
   coinsDeducted     Int
   reason            String
@@ -1024,13 +1024,13 @@ model PaymentRecord {
   id                String        @id @default(uuid())
   userId            String
   packageId         String
-  razorpayOrderId   String        @unique
-  razorpayPaymentId String?       @unique
+  gatewayOrderId    String        @unique
+  gatewayPaymentId  String?       @unique
   amount            Int
   currency          String        @default("INR")
   coinsToCredit     Int
   status            PaymentStatus @default(PENDING)
-  gateway           String        @default("RAZORPAY")
+  gateway           String        @default("CASHFREE")
   paymentMethod     String?
   verifiedAt        DateTime?
   createdAt         DateTime      @default(now())
@@ -1038,8 +1038,8 @@ model PaymentRecord {
   refunds           CoinRefund[]
 
   @@index([userId])
-  @@index([razorpayOrderId])
-  @@index([razorpayPaymentId])
+  @@index([gatewayOrderId])
+  @@index([gatewayPaymentId])
 }
 
 enum WithdrawalStatus {

@@ -464,7 +464,7 @@ async getUsers(adminId: string, page = 1, limit = 50) {
     skip: (page - 1) * limit,
     take: limit,
     include: {
-      wallet: { select: { totalEarnings: true } },
+      wallet: { select: { totalEarnings: true, coinBalance: true } },
       _count: { select: { reels: true } },
     },
   });
@@ -1586,7 +1586,7 @@ async getPaymentRecords(adminId: string) {
     });
 
     if (!paymentRecord) throw new BadRequestException('Payment record not found.');
-    if (!paymentRecord.razorpayPaymentId) throw new BadRequestException('No Razorpay payment ID. Cannot process refund.');
+    if (!paymentRecord.gatewayPaymentId) throw new BadRequestException('No Gateway payment ID. Cannot process refund.');
     if (!['SUCCESS', 'PARTIALLY_REFUNDED'].includes(paymentRecord.status)) {
       throw new BadRequestException(`Cannot refund a payment with status: ${paymentRecord.status}`);
     }
@@ -1624,26 +1624,30 @@ async getPaymentRecords(adminId: string) {
       },
     });
 
-    const Razorpay = require('razorpay');
-    const razorpay = new Razorpay({
-      key_id: process.env.RAZORPAY_KEY_ID!,
-      key_secret: process.env.RAZORPAY_KEY_SECRET!,
-    });
+    const axios = require('axios');
 
     try {
-      const rzpRefund = await razorpay.payments.refund(paymentRecord.razorpayPaymentId, {
-        amount: refundAmount * 100,
-        speed: 'normal',
-        notes: {
-          reason: data.reason.trim(),
-          refundId: refundRecord.id,
-          adminId,
-          refundType: data.refundType,
+      const isProd = process.env.CASHFREE_ENV === 'production';
+      const url = isProd ? 'https://api.cashfree.com/pg/orders' : 'https://sandbox.cashfree.com/pg/orders';
+      const response = await axios.post(
+        `${url}/${paymentRecord.gatewayOrderId}/refunds`,
+        {
+          refund_amount: refundAmount,
+          refund_id: refundRecord.id.substring(0, 40),
+          refund_note: data.reason.trim(),
         },
-      });
+        {
+          headers: {
+            'x-client-id': process.env.CASHFREE_PG_APP_ID!,
+            'x-client-secret': process.env.CASHFREE_PG_SECRET_KEY!,
+            'x-api-version': '2023-08-01',
+          },
+        }
+      );
 
-      const gatewayRefundId = rzpRefund.id;
-      const refundStatus = rzpRefund.status === 'processed' ? 'COMPLETED' : 'PROCESSING';
+      const cfRefund = response.data;
+      const gatewayRefundId = String(cfRefund.cf_refund_id || cfRefund.refund_id);
+      const refundStatus = cfRefund.refund_status === 'SUCCESS' ? 'COMPLETED' : 'PROCESSING';
       const totalRefunded = totalAlreadyRefunded + refundAmount;
       const isFullyRefunded = totalRefunded >= paymentRecord.amount;
 
@@ -1652,8 +1656,8 @@ async getPaymentRecords(adminId: string) {
           where: { id: refundRecord.id },
           data: {
             status: refundStatus,
-            razorpayRefundId: gatewayRefundId,
-            gatewayResponse: JSON.parse(JSON.stringify(rzpRefund)),
+            gatewayRefundId: gatewayRefundId,
+            gatewayResponse: JSON.parse(JSON.stringify(cfRefund)),
             processedAt: refundStatus === 'COMPLETED' ? new Date() : undefined,
           },
         });
