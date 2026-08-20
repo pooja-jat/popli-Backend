@@ -5,7 +5,11 @@ import * as admin from 'firebase-admin';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
+import * as dns from 'dns';
 import { HttpExceptionFilter } from './http-exception.filter';
+
+// Force Node.js to use Google DNS to bypass broken Hotspot IPv6 DNS
+dns.setServers(['8.8.8.8', '8.8.4.4']);
 
 import {
   DocumentBuilder,

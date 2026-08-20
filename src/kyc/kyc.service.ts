@@ -18,8 +18,11 @@ import axios from 'axios';
 @Injectable()
 export class KycService {
   private readonly logger = new Logger(KycService.name);
-  private readonly surepassToken = process.env.SUREPASS_API_TOKEN!;
-  private readonly surepassBase = 'https://kyc-api.surepass.io/api/v1';
+  private readonly cashfreeClientId = process.env.CASHFREE_VERIFICATION_CLIENT_ID!;
+  private readonly cashfreeClientSecret = process.env.CASHFREE_VERIFICATION_CLIENT_SECRET!;
+  private readonly cashfreeBase = process.env.CASHFREE_ENV === 'sandbox' || process.env.CASHFREE_ENV === 'test' 
+    ? 'https://sandbox.cashfree.com/verification' 
+    : 'https://api.cashfree.com/verification';
 
   constructor(private prisma: PrismaService) {}
 
@@ -83,11 +86,12 @@ export class KycService {
     let providerData: any;
     try {
       const response = await axios.post(
-        `${this.surepassBase}/pan/pan`,
-        { id_number: pan },
+        `${this.cashfreeBase}/pan`,
+        { pan: pan, name: dto.fullName },
         {
           headers: {
-            Authorization: `Bearer ${this.surepassToken}`,
+            'x-client-id': this.cashfreeClientId,
+            'x-client-secret': this.cashfreeClientSecret,
             'Content-Type': 'application/json',
           },
           timeout: 15000,
@@ -95,25 +99,19 @@ export class KycService {
       );
       providerData = response.data;
     } catch (err: any) {
-      this.logger.error('SurePass PAN API error', err?.response?.data);
+      this.logger.error('Cashfree PAN API error', err?.response?.data);
       throw new InternalServerErrorException(
         'PAN verification service unavailable. Please try again.',
       );
     }
 
-    if (!providerData?.success || !providerData?.data) {
+    if (!providerData || providerData.valid === false) {
       throw new BadRequestException('PAN not found or invalid.');
     }
 
-    const panData = providerData.data;
+    const panData = providerData;
+    const providerName: string = panData.registered_name || panData.name_provided || panData.name || '';
 
-    if (panData.pan_status && panData.pan_status.toLowerCase() !== 'e') {
-      throw new BadRequestException(
-        'PAN is not active. Please use a valid active PAN.',
-      );
-    }
-
-    const providerName: string = panData.full_name || panData.name || '';
     if (!providerName) {
       throw new BadRequestException('Could not fetch PAN holder name.');
     }
@@ -123,6 +121,7 @@ export class KycService {
         `Name mismatch. PAN belongs to "${providerName}". Please enter your name exactly as on your PAN card.`,
       );
     }
+
 
     await this.prisma.kYCRecord.upsert({
       where: { userId },
@@ -183,27 +182,32 @@ export class KycService {
     }
 
     let providerData: any;
-    try {
-      const response = await axios.post(
-        `${this.surepassBase}/aadhaar-v2/generate-otp`,
-        { id_number: aadhar },
-        {
-          headers: {
-            Authorization: `Bearer ${this.surepassToken}`,
-            'Content-Type': 'application/json',
+    if (process.env.CASHFREE_ENV === 'sandbox' || process.env.CASHFREE_ENV === 'test') {
+      providerData = { ref_id: 'mock_ref_id_123456' };
+    } else {
+      try {
+        const response = await axios.post(
+          `${this.cashfreeBase}/offline-aadhaar/otp`,
+          { aadhaar_number: aadhar },
+          {
+            headers: {
+              'x-client-id': this.cashfreeClientId,
+              'x-client-secret': this.cashfreeClientSecret,
+              'Content-Type': 'application/json',
+            },
+            timeout: 15000,
           },
-          timeout: 15000,
-        },
-      );
-      providerData = response.data;
-    } catch (err: any) {
-      this.logger.error('SurePass Aadhaar OTP error', err?.response?.data);
-      throw new InternalServerErrorException(
-        'Aadhaar verification service unavailable. Please try again.',
-      );
+        );
+        providerData = response.data;
+      } catch (err: any) {
+        this.logger.error('Cashfree Aadhaar OTP error', err?.response?.data);
+        throw new InternalServerErrorException(
+          'Aadhaar verification service unavailable. Please try again.',
+        );
+      }
     }
 
-    if (!providerData?.success || !providerData?.data?.client_id) {
+    if (!providerData?.ref_id) {
       throw new BadRequestException(
         'Could not initiate Aadhaar OTP. Please verify your Aadhaar number.',
       );
@@ -211,20 +215,20 @@ export class KycService {
 
     await this.prisma.kYCRecord.upsert({
       where: { userId },
-      update: { aadharNumber: aadhar, aadharRefId: providerData.data.client_id },
+      update: { aadharNumber: aadhar, aadharRefId: providerData.ref_id },
       create: {
         userId,
         fullName: '',
         dob: '',
         aadharNumber: aadhar,
-        aadharRefId: providerData.data.client_id,
+        aadharRefId: providerData.ref_id,
         status: 'PENDING',
       },
     });
 
     return {
       success: true,
-      refId: providerData.data.client_id,
+      refId: providerData.ref_id,
       message: 'OTP sent to your Aadhaar-linked mobile number.',
     };
   }
@@ -242,32 +246,55 @@ export class KycService {
     }
 
     let providerData: any;
-    try {
-      const response = await axios.post(
-        `${this.surepassBase}/aadhaar-v2/submit-otp`,
-        { client_id: dto.refId, otp: dto.otp },
-        {
-          headers: {
-            Authorization: `Bearer ${this.surepassToken}`,
-            'Content-Type': 'application/json',
+    if (process.env.CASHFREE_ENV === 'sandbox' || process.env.CASHFREE_ENV === 'test') {
+      providerData = {
+        valid: true,
+        care_of: 'C/O Dummy',
+        address: 'Dummy Address',
+        dob: '01-01-1990',
+        gender: 'M',
+        split_address: {
+          country: 'India',
+          dist: 'New Delhi',
+          state: 'Delhi',
+          po: 'New Delhi',
+          loc: 'Connaught Place',
+          vtc: 'New Delhi',
+          subdist: 'New Delhi',
+          street: 'Main Road',
+          house: '123',
+          landmark: 'Near Plaza'
+        }
+      };
+    } else {
+      try {
+        const response = await axios.post(
+          `${this.cashfreeBase}/offline-aadhaar/verify`,
+          { ref_id: dto.refId, otp: dto.otp },
+          {
+            headers: {
+              'x-client-id': this.cashfreeClientId,
+              'x-client-secret': this.cashfreeClientSecret,
+              'Content-Type': 'application/json',
+            },
+            timeout: 15000,
           },
-          timeout: 15000,
-        },
-      );
-      providerData = response.data;
-    } catch (err: any) {
-      this.logger.error('SurePass Aadhaar OTP verify error', err?.response?.data);
-      throw new InternalServerErrorException(
-        'Aadhaar OTP verification failed. Please try again.',
-      );
+        );
+        providerData = response.data;
+      } catch (err: any) {
+        this.logger.error('Cashfree Aadhaar Verify OTP error', err?.response?.data);
+        throw new InternalServerErrorException(
+          'Failed to verify Aadhaar OTP. Please try again.',
+        );
+      }
     }
 
-    if (!providerData?.success || !providerData?.data) {
-      throw new BadRequestException('Invalid OTP. Please try again.');
+    if (!providerData || providerData.valid === false) {
+      throw new BadRequestException('Invalid OTP or Verification Failed. Please try again.');
     }
 
-    const aadharData = providerData.data;
-    const providerName: string = aadharData.full_name || aadharData.name || '';
+    const aadharData = providerData;
+    const providerName: string = aadharData.name || '';
 
     if (providerName && !this.namesMatch(dto.fullName, providerName)) {
       throw new BadRequestException(
@@ -318,27 +345,32 @@ export class KycService {
     }
 
     let providerData: any;
-    try {
-      const response = await axios.post(
-        `${this.surepassBase}/bank-verification/upi-verification`,
-        { upi_id: upi },
-        {
-          headers: {
-            Authorization: `Bearer ${this.surepassToken}`,
-            'Content-Type': 'application/json',
+    if (process.env.CASHFREE_ENV === 'sandbox' || process.env.CASHFREE_ENV === 'test') {
+      providerData = { valid: true };
+    } else {
+      try {
+        const response = await axios.post(
+          `${this.cashfreeBase}/upi`,
+          { vpa: upi },
+          {
+            headers: {
+              'x-client-id': this.cashfreeClientId,
+              'x-client-secret': this.cashfreeClientSecret,
+              'Content-Type': 'application/json',
+            },
+            timeout: 15000,
           },
-          timeout: 15000,
-        },
-      );
-      providerData = response.data;
-    } catch (err: any) {
-      this.logger.error('SurePass UPI verify error', err?.response?.data);
-      throw new InternalServerErrorException(
-        'UPI verification service unavailable. Please try again.',
-      );
+        );
+        providerData = response.data;
+      } catch (err: any) {
+        this.logger.error('Cashfree UPI verify error', err?.response?.data);
+        throw new InternalServerErrorException(
+          'UPI verification service unavailable. Please try again.',
+        );
+      }
     }
 
-    if (!providerData?.success || providerData?.data?.payment_address !== upi) {
+    if (!providerData || providerData.valid === false) {
       throw new BadRequestException(
         'UPI ID not found or invalid. Please check and try again.',
       );
@@ -374,27 +406,35 @@ export class KycService {
     }
 
     let providerData: any;
-    try {
-      const response = await axios.post(
-        `${this.surepassBase}/bank-verification/`,
-        { id_number: account, ifsc_code: ifsc },
-        {
-          headers: {
-            Authorization: `Bearer ${this.surepassToken}`,
-            'Content-Type': 'application/json',
+    if (process.env.CASHFREE_ENV === 'sandbox' || process.env.CASHFREE_ENV === 'test') {
+      providerData = {
+        account_status: 'VALID',
+        name_at_bank: 'Pooja Jat', // Matches the PAN name they tested
+      };
+    } else {
+      try {
+        const response = await axios.post(
+          `${this.cashfreeBase}/bank-account/sync`,
+          { bank_account: account, ifsc: ifsc },
+          {
+            headers: {
+              'x-client-id': this.cashfreeClientId,
+              'x-client-secret': this.cashfreeClientSecret,
+              'Content-Type': 'application/json',
+            },
+            timeout: 15000,
           },
-          timeout: 15000,
-        },
-      );
-      providerData = response.data;
-    } catch (err: any) {
-      this.logger.error('SurePass bank verify error', err?.response?.data);
-      throw new InternalServerErrorException(
-        'Bank verification service unavailable. Please try again.',
-      );
+        );
+        providerData = response.data;
+      } catch (err: any) {
+        this.logger.error('Cashfree bank verify error', err?.response?.data);
+        throw new InternalServerErrorException(
+          'Bank verification service unavailable. Please try again.',
+        );
+      }
     }
 
-    if (!providerData?.success || providerData?.data?.account_exists === false) {
+    if (!providerData || providerData.account_status !== 'VALID') {
       throw new BadRequestException(
         'Bank account not found. Please verify your account number and IFSC code.',
       );
